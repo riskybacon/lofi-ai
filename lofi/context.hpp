@@ -1,3 +1,6 @@
+/**
+ * @brief computational graph for automatic differentiation
+ */
 #pragma once
 
 #include <functional>
@@ -10,6 +13,12 @@
 
 #include <lofi/storage.hpp>
 
+/**
+ * @brief A node in a graph
+ *
+ * Holds the "context" for a node in the graph. The context contains the output
+ * from the operation and the gradient from the backward pass.
+ */
 template <typename T> struct Context {
     using value_type = T;
     using storage_type = MatrixStorage<T>;
@@ -29,15 +38,11 @@ template <typename T> struct Context {
     const shape_type &shape() const { return data.shape; }
 };
 
+/**
+ * @brief element-wise addition of two matrices
+ */
 template <typename T>
 void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
-    shape_type expected_shape = max_shape(lhs->shape(), rhs->shape());
-    if (out->data.shape != expected_shape) {
-        std::stringstream ss;
-        ss << "Bad shape, out.shape=" << out->data.shape << ", expected " << expected_shape;
-        throw std::invalid_argument(ss.str());
-    }
-
     add(out->data, lhs->data, rhs->data);
     out->prev = {lhs, rhs};
     lhs->degrees++;
@@ -49,15 +54,11 @@ void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std
     };
 }
 
+/**
+ * @brief element-wise subtraction of two matrices
+ */
 template <typename T>
 void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
-    shape_type expected_shape = max_shape(lhs->shape(), rhs->shape());
-    if (out->data.shape != expected_shape) {
-        std::stringstream ss;
-        ss << "Bad shape, out.shape=" << out->data.shape << ", expected " << expected_shape;
-        throw std::invalid_argument(ss.str());
-    }
-
     subtract(out->data, lhs->data, rhs->data);
     out->prev = {lhs, rhs};
     lhs->degrees++;
@@ -70,15 +71,11 @@ void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     };
 }
 
+/**
+ * @brief element-wise multiplication of two matrices
+ */
 template <typename T>
 void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
-    shape_type expected_shape = max_shape(lhs->shape(), rhs->shape());
-    if (out->data.shape != expected_shape) {
-        std::stringstream ss;
-        ss << "Bad shape, out.shape=" << out->data.shape << ", expected " << expected_shape;
-        throw std::invalid_argument(ss.str());
-    }
-
     multiply(out->data, lhs->data, rhs->data);
     out->prev = {lhs, rhs};
     lhs->degrees++;
@@ -95,15 +92,11 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     };
 }
 
+/**
+ * @brief element-wise division of two matrices
+ */
 template <typename T>
 void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
-    shape_type expected_shape = max_shape(lhs->shape(), rhs->shape());
-    if (out->data.shape != expected_shape) {
-        std::stringstream ss;
-        ss << "Bad shape, out.shape=" << out->data.shape << ", expected " << expected_shape;
-        throw std::invalid_argument(ss.str());
-    }
-
     divide(out->data, lhs->data, rhs->data);
     out->prev = {lhs, rhs};
     lhs->degrees++;
@@ -120,22 +113,11 @@ void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     };
 }
 
+/**
+ * @brief Matrix multiplication
+ */
 template <typename T>
 void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
-    shape_type expected_shape = {lhs->shape()[0], rhs->shape()[1]};
-    if (out->shape() != expected_shape) {
-        std::stringstream ss;
-        ss << "Bad shape, out->shape=" << out->shape() << ", expected " << expected_shape;
-        throw std::invalid_argument(ss.str());
-    }
-
-    if (lhs->shape()[1] != rhs->shape()[0]) {
-        std::stringstream ss;
-        ss << "Bad shape, lhs->shape()=" << lhs->shape() << ", rhs->shape()=" << rhs->shape()
-           << ", middle dims must match";
-        throw std::invalid_argument(ss.str());
-    }
-
     matmul(out->data, lhs->data, rhs->data);
     out->prev = {lhs, rhs};
     lhs->degrees++;
@@ -162,6 +144,9 @@ void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     };
 }
 
+/**
+ * @brief element-wise tanh of a matrix
+ */
 template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     tanh(out->data, lhs->data);
     out->prev = {lhs};
@@ -178,6 +163,9 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
     };
 }
 
+/**
+ * @brief element-wise exp of a matrix
+ */
 template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     exp(out->data, lhs->data);
     out->prev = {lhs};
@@ -186,19 +174,14 @@ template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->backward = [out, lhs]() {
         // lhs->grad += out->data * out->grad;
         MatrixStorage<T> tmp(out->data.shape);
-
-        // std::cout << out->data.shape << std::endl;
-        // std::cout << out->grad.shape << std::endl;
-        // std::cout << lhs->grad.shape << std::endl;
-        // std::cout << out->label << std::endl;
-        // std::cout << lhs->label << std::endl;
-        // lhs->grad = 0;
         multiply(lhs->grad, out->data, out->grad);
         add(lhs->grad, lhs->grad, tmp);
-        // eltwise_unary_func(lhs->grad, out->data, [](const T &x) { return x; });
     };
 }
 
+/**
+ * @brief element-wise log base 2 of a matrix
+ */
 template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     log(out->data, lhs->data);
     out->prev = {lhs};
@@ -214,6 +197,9 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
     };
 }
 
+/**
+ * @brief element-wise pow (lhs ** rhs) of a matrix
+ */
 template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T &rhs) {
     pow(out->data, lhs->data, rhs);
     out->prev = {lhs};
@@ -231,6 +217,9 @@ template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr
     };
 }
 
+/**
+ * @brief select rows and columns from a matrix
+ */
 template <typename T, typename U>
 void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs,
                           const std::shared_ptr<Context<U>> &idx) {
@@ -250,6 +239,9 @@ void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Cont
     };
 }
 
+/**
+ * @brief sum a matrix along an axis
+ */
 template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
     sum(out->data, lhs->data, axis);
     out->prev = {lhs};
@@ -342,15 +334,6 @@ template <typename T, typename Func> void topo(std::shared_ptr<Context<T>> &root
     while (q.size() > 0) {
         auto ctx = q.front();
         q.pop();
-#if 0
-        std::cout << "`";
-        if (!ctx->label.empty()) {
-            std::cout << ctx->label;
-        } else {
-            std::cout << ctx->data.id();
-        }
-        std::cout << "`" << std::endl;
-#endif
         func(ctx);
 
         for (auto &child : ctx->prev) {
