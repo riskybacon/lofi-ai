@@ -91,6 +91,7 @@ for (size_t k = 0; k < num_steps; k++) {
   - [ ] Transformer blocks
 - [ ] Increase test coverage
   - [ ] Carefully verify correctness
+- [ ] Break out MatrixStorage into two classes
 - [ ] Add Perfetto support
 - [ ] Optimize for CPU
   - [ ] Faster matmul
