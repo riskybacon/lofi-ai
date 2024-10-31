@@ -2,10 +2,10 @@
 
 ### 📚 Overview
 
-lofi-ai is a C++ header-only machine learning framework written for educational
-purposes. It is innspired by Andrej Karpathy's
-[micrograd](https://github.com/karpathy/micrograd) and builds on my
-[micrograd_cpp](https://github.com/riskybacon/micrograd_cpp) project.
+lofi-ai is a C++ header-only machine learning framework created for educational
+purposes. Inspired by Andrej Karpathy's
+[micrograd](https://github.com/karpathy/micrograd), it builds upon my earlier
+project, [micrograd_cpp](https://github.com/riskybacon/micrograd_cpp).
 
 lofi-ai's only requirement is a compiler with C++20 support. No separate
 libraries are needed.
