@@ -3,9 +3,9 @@
 ### 📚 Overview
 
 lofi-ai is a C++ header-only machine learning framework written for educational
-purposes. Inspired by [micrograd](https://github.com/karpathy/micrograd) and
-builds on my [micrograd_cpp](https://github.com/riskybacon/micrograd_cpp)
-project.
+purposes. It is innspired by Andrej Karpathy's
+[micrograd](https://github.com/karpathy/micrograd) and builds on my
+[micrograd_cpp](https://github.com/riskybacon/micrograd_cpp) project.
 
 lofi-ai's only requirement is a compiler with C++20 support. No separate
 libraries are needed.
@@ -89,6 +89,7 @@ for (size_t k = 0; k < num_steps; k++) {
 - [ ] Add features
   - [ ] max()
   - [ ] Transformer blocks
+  - [ ] Forward pass graph capture / delayed execution
 - [ ] Increase test coverage
   - [ ] Carefully verify correctness
 - [ ] Break out MatrixStorage into two classes
@@ -97,6 +98,8 @@ for (size_t k = 0; k < num_steps; k++) {
   - [ ] Faster matmul
   - [ ] Fuse kernels in backward pass
 - [ ] Add CUDA support
+  - [ ] CUDA-based matmul replacement
+  - [ ] cuDNN
 
 ### 🤝 Contributing
 
