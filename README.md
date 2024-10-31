@@ -2,7 +2,7 @@
 
 ### 📚 Overview
 
-This is a C++ header-only machine learning framework written for educational
+lofi-ai is a C++ header-only machine learning framework written for educational
 purposes. Inspired by [micrograd](https://github.com/karpathy/micrograd) and
 builds on my [micrograd_cpp](https://github.com/riskybacon/micrograd_cpp)
 project.
@@ -86,16 +86,16 @@ for (size_t k = 0; k < num_steps; k++) {
 
 ### 📝 TODO
 
-[ ] Add features
-  [ ] max()
-  [ ] Transformer blocks
-[ ] Increase test coverage
-  [ ] Carefully verify correctness
-[ ] Add Perfetto support
-[ ] Optimize for CPU
-  [ ] Faster matmul
-  [ ] Fuse kernels in backward pass
-[ ] Add CUDA support
+- [ ] Add features
+  - [ ] max()
+  - [ ] Transformer blocks
+- [ ] Increase test coverage
+  - [ ] Carefully verify correctness
+- [ ] Add Perfetto support
+- [ ] Optimize for CPU
+  - [ ] Faster matmul
+  - [ ] Fuse kernels in backward pass
+- [ ] Add CUDA support
 
 ### 🤝 Contributing
 
