@@ -90,8 +90,11 @@ for (size_t k = 0; k < num_steps; k++) {
   [ ] max()
   [ ] Transformer blocks
 [ ] Increase test coverage
+  [ ] Carefully verify correctness
 [ ] Add Perfetto support
 [ ] Optimize for CPU
+  [ ] Faster matmul
+  [ ] Fuse kernels in backward pass
 [ ] Add CUDA support
 
 ### 🤝 Contributing
