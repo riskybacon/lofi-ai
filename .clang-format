@@ -1,0 +1,44 @@
+# Use LLVM style as the base
+BasedOnStyle: LLVM
+
+# Customize indentation settings
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never  # Set to Always or ForIndentation if you prefer tabs
+
+# Brace wrapping style for functions, classes, and namespaces
+BraceWrapping:
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterStruct: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+
+# Column limit for line width
+ColumnLimit: 120  # Set to preferred line width
+
+# Control spacing around operators
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInAngles: false
+SpaceAfterCStyleCast: true
+
+# Pointer alignment style
+PointerAlignment: Right  # Set to Left or Middle if you prefer
+
+# Control sorting of includes
+SortIncludes: true
+
+# Align trailing comments
+AlignTrailingComments: true
+
+# Align function declarations
+AlignConsecutiveDeclarations: false
+
+# Other optional rules
+AllowShortFunctionsOnASingleLine: All  # Set to All if preferred
+
+BreakTemplateDeclarations: Yes
