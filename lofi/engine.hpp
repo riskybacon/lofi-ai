@@ -5,9 +5,16 @@
 #include <memory>
 #include <ostream>
 #include <random>
+#include <vector>
 
 #include <lofi/context.hpp>
 #include <lofi/generator.hpp>
+
+auto range(size_t num) {
+    std::vector<size_t> out(num);
+    std::iota(begin(out), end(out), 0);
+    return out;
+}
 
 template <typename T> struct Matrix {
     using value_type = T;
@@ -51,6 +58,17 @@ template <typename T> struct Matrix {
         return mat;
     }
 
+    Matrix(const std::vector<size_t> &rows, std::vector<size_t> &cols)
+    : ctx_(std::make_shared<context_type>(shape_type({rows.size(), 2}))) {
+        if (rows.size() != cols.size()) {
+            throw std::invalid_argument("rows and cols must have the same size");
+        }
+
+        for (size_t i = 0; i < rows.size(); i++) {
+            ctx_->data[{i, 0}] = rows[i];
+            ctx_->data[{i, 1}] = cols[i];
+        }
+    }
     /**
      * @brief Creates a matrix with elements drawn from a normal distribution.
      *

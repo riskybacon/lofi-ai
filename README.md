@@ -62,6 +62,7 @@ Example training loop for a simple network:
 ```cpp
 auto W = Matrix<float>::randn({vocab_size, vocab_size}, g);
 auto xenc = Matrix<float>::one_hot(xs, vocab_size);
+auto selector = Matrix<size_t>(range(ys.size()), ys);
 
 for (size_t k = 0; k < num_steps; k++) {
     // Forward

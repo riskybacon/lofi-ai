@@ -12,8 +12,6 @@
 #include <lofi/engine.hpp>
 #include <lofi/graphviz.hpp>
 
-using matrix_type = Matrix<float>;
-
 /**
  * @brief Reads the content of a file and returns various data structures based on its contents.
  *
@@ -106,19 +104,9 @@ int main(void) {
     float lr = 10;
     size_t num_steps = 1000;
 
-    auto W = matrix_type::randn({vocab_size, vocab_size}, g);
-    W.label() = "W";
-
-    Matrix<size_t> selector({num, 2});
-    selector.label() = "selector";
-
-    for (size_t i = 0; i < num; i++) {
-        selector.data()[{i, 0}] = i;
-        selector.data()[{i, 1}] = static_cast<size_t>(ys[i]);
-    }
-
-    auto xenc = matrix_type::one_hot(xs, vocab_size);
-    xenc.label() = "xenc";
+    auto W = Matrix<float>::randn({vocab_size, vocab_size}, g);
+    auto xenc = Matrix<float>::one_hot(xs, vocab_size);
+    auto selector = Matrix<size_t>(range(num), ys);
 
     // Training
     for (size_t k = 0; k < num_steps; k++) {
@@ -135,10 +123,15 @@ int main(void) {
 
         // Visualize conpute graph on first iteration
         if (k == 0) {
+            W.label() = "W";
+            xenc.label() = "xenc";
+            selector.label() = "selector";
             xenc.label() = "xenc";
             logits.label() = "logits";
             counts.label() = "counts";
             probs.label() = "probs";
+            logprobs.label() = "logprobs";
+            loss.label() = "loss";
 
             draw_dot(loss, "one_layer.dot", "LR");
             // Fails if graphviz is not installed, but won't stop execution
