@@ -121,9 +121,22 @@ void is_close_helper(const std::vector<T> &a, const std::vector<T> &b, const cha
     num_tests++;
 }
 
+template <typename T>
+void in_range_helper(T k, const T &v, const T &min_val, const T &max_val, const char *file, const int line) {
+    if (v < min_val || v > max_val) {
+        std::cerr << "[FAIL] (" << file << ":" << line << "): value " << k << ", " << v << " not in range [" << min_val << "," << max_val
+                  << "]" << std::endl;
+        num_failed++;
+    } else {
+        num_passed++;
+    }
+    num_tests++;
+}
+
 #define is_close(a, b) is_close_helper(a, b, __FILE__, __LINE__)
 #define is_equal(a, b) is_equal_helper(a, b, __FILE__, __LINE__)
 #define not_equal(a, b) not_equal_helper(a, b, __FILE__, __LINE__)
+#define in_range(k, v, min_val, max_val) in_range_helper(k, v, min_val, max_val, __FILE__, __LINE__)
 
 #define throws_exception(exc_type, call)                                                                               \
     try {                                                                                                              \

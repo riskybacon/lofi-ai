@@ -316,3 +316,62 @@ template <typename T> Matrix<T> operator*(const T &lhs, const Matrix<T> &rhs) {
     multiply(out.ctx_, lhs, rhs.ctx_);
     return out;
 }
+
+template <typename T> void normalize_probabilities(std::vector<T> &probs) {
+    const T sum_probs = std::accumulate(probs.begin(), probs.end(), 0.0f);
+    if (sum_probs < 0) {
+        throw std::invalid_argument("Sum of probabilities must be greater than or equal to 0.");
+    }
+    const float divisor = sum_probs == 0 ? 0 : static_cast<T>(1) / sum_probs;
+
+    // Normalize the probabilities to ensure they sum to 1
+    std::vector<T> normalized_probs(probs.size());
+    for (size_t i = 0; i < probs.size(); ++i) {
+        if (probs[i] < 0) {
+            throw std::invalid_argument("Probabilities must be non-negative.");
+        }
+        probs[i] *= divisor;
+    }
+}
+
+/**
+ * @brief Sample indexes from a 1xn row matrix using a multinomial distribution
+ */
+template <typename T>
+std::vector<size_t> multinomial(const Matrix<T> &row_matrix_probs, int num_samples, bool replacement,
+                                std::mt19937 &gen) {
+    if (row_matrix_probs.shape()[0] != 1) {
+        throw std::invalid_argument("row_matrix_probs must be a row vector");
+    }
+
+    // Make a clone of probabilities so that
+    // * They can be modified without changing the input matrix
+    // * They can be converted to a std::vector for use in std::discrete_distribution
+
+    // TODO: create iterators for rows & columns in a matrix so that
+    // matrices can be used directly in std::discrete_distribution
+    // This will allow us to remove the normalization function and
+    // use lofi's sum function + multiplication function to normalize
+    std::vector<T> probs(row_matrix_probs.shape()[1]);
+    for (size_t i = 0; i < row_matrix_probs.shape()[1]; i++) {
+        probs[i] = row_matrix_probs.data()[{0, i}];
+    }
+
+    normalize_probabilities(probs);
+
+    std::vector<size_t> samples;
+    std::discrete_distribution<> dist(probs.begin(), probs.end());
+
+    for (int i = 0; i < num_samples; ++i) {
+        size_t sampled = dist(gen);
+        samples.push_back(sampled);
+
+        if (!replacement) {
+            probs[sampled] = 0;
+            normalize_probabilities(probs);
+            dist = std::discrete_distribution<>(probs.begin(), probs.end());
+        }
+    }
+
+    return samples;
+}
