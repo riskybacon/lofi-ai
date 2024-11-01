@@ -102,7 +102,7 @@ int main(void) {
     g.seed(INT_MAX);
 
     float lr = 10;
-    size_t num_steps = 1000;
+    size_t num_steps = 300;
 
     auto W = Matrix<float>::randn({vocab_size, vocab_size}, g);
     auto xenc = Matrix<float>::one_hot(xs, vocab_size);
@@ -147,5 +147,23 @@ int main(void) {
         W.data() += -lr * W.grad();
     }
 
+    // Eval
+    for (size_t i = 0; i < 5; i++) {
+        size_t ix = 0;
+        while (true) {
+            std::vector<size_t> xs = {ix};
+            auto xenc = Matrix<float>::one_hot(xs, vocab_size);
+            auto logits = matmul(xenc, W);
+            auto counts = logits.exp();
+            auto probs = counts * counts.sum(1).pow(-1.0f);
+            ix = multinomial(probs, 1, true, g).front();
+            std::cout << itos.at(ix);
+
+            if (ix == 0) {
+                break;
+            }
+        }
+        std::cout << std::endl;
+    }
     return 0;
 }
