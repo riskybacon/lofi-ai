@@ -36,6 +36,19 @@ shape_type bcast0(shape_type &&idx) { return shape_type({0, idx[1]}); }
 
 shape_type bcast1(shape_type &&idx) { return shape_type({idx[0], 0}); }
 
+shape_type bcast_all(shape_type &&idx) { return shape_type({0, 0}); }
+
+auto choose_bcast(const shape_type &shape) {
+    if (shape[0] == 1 && shape[1] == 1) {
+        return bcast_all;
+    } else if (shape[0] == 1) {
+        return bcast0;
+    } else if (shape[1] == 1) {
+        return bcast1;
+    }
+    return identity;
+}
+
 shape_type max_shape(const shape_type &a, const shape_type &b) {
     shape_type out;
     for (size_t i = 0; i < out.size(); i++) {
@@ -288,10 +301,6 @@ template <typename T> void broadcast(MatrixStorage<T> &lhs, const MatrixStorage<
         throw std::invalid_argument(ss.str());
     };
 
-    if (rhs.shape[0] != 1 && rhs.shape[1] != 1) {
-        throw_incompatible_lhs_rhs();
-    }
-
     if (rhs.shape[0] == 1 && lhs.shape[1] != rhs.shape[1]) {
         throw_incompatible_lhs_rhs();
     }
@@ -300,7 +309,8 @@ template <typename T> void broadcast(MatrixStorage<T> &lhs, const MatrixStorage<
         throw_incompatible_lhs_rhs();
     }
 
-    auto idx_func = rhs.shape[0] == 1 ? bcast0 : bcast1;
+    auto idx_func = choose_bcast(rhs.shape);
+
     for (size_t r = 0; r < lhs.shape[0]; r++) {
         for (size_t c = 0; c < lhs.shape[1]; c++) {
             lhs[{r, c}] = rhs[idx_func({r, c})];
@@ -440,7 +450,9 @@ void eltwise_binary_func(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, con
 
     if (out.shape != rhs.shape) {
         bcast_rhs = true;
-        if (rhs.shape[0] == 1) {
+        if (rhs.shape[0] == 1 && rhs.shape[1] == 1) {
+            r_idx = bcast_all;
+        } else if (rhs.shape[0] == 1) {
             r_idx = bcast0;
         } else if (rhs.shape[1] == 1) {
             r_idx = bcast1;
@@ -451,7 +463,9 @@ void eltwise_binary_func(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, con
 
     if (out.shape != lhs.shape) {
         bcast_lhs = true;
-        if (lhs.shape[0] == 1) {
+        if (lhs.shape[0] == 1 && lhs.shape[1] == 1) {
+            l_idx = bcast_all;
+        } else if (lhs.shape[0] == 1) {
             l_idx = bcast0;
         } else if (lhs.shape[1] == 1) {
             l_idx = bcast1;

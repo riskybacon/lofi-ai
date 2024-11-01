@@ -390,44 +390,67 @@ template <typename T> void test_eltwise_binary_func_bcast(size_t axis) {
                      eltwise_binary_func(out, bcast_fail, full, [](const T &a, const T &b) { return a + b; }));
 }
 
-template <typename T> void test_broadcast() {
-    shape_type shape = {17, 23};
-    shape_type shape_bcast_0 = {1, shape[1]};
-    shape_type shape_bcast_1 = {shape[0], 1};
-    MatrixStorage<T> lhs(shape);
-    MatrixStorage<T> rhs_0(shape_bcast_0);
-    MatrixStorage<T> rhs_1(shape_bcast_1);
+template <typename T> void test_broadcast(size_t axis) {
+    // shape_type shape = {17, 23};
+    shape_type shape = {4, 5};
+    shape_type shape_bcast = shape;
+    shape_bcast[axis] = 1;
+    size_t off_axis = axis == 0 ? 1 : 0;
+
+    // Ugh, special case for axis == 2, should size_t be used?
+    // Should there be some special axis type? Or use ssize_t and -1?
+    if (axis == 2) {
+        shape_bcast[off_axis] = 1;
+    }
+
+    MatrixStorage<T> lhs(shape, 0);
+    MatrixStorage<T> rhs(shape_bcast);
 
     MatrixStorage<T> out(shape);
     MatrixStorage<T> expected(shape);
 
-    fill_mat(rhs_0);
-    fill_mat(rhs_1);
+    fill_mat(rhs);
+    broadcast(out, rhs);
 
-    broadcast(out, rhs_0);
-
-    for (size_t r = 0; r < out.shape[0]; r++) {
-        for (size_t c = 0; c < out.shape[1]; c++) {
-            expected[{r, c}] = rhs_0[{0, c}];
+    if (axis == 0) {
+        for (size_t r = 0; r < out.shape[0]; r++) {
+            for (size_t c = 0; c < out.shape[1]; c++) {
+                expected[{r, c}] = rhs[{0, c}];
+            }
         }
+    } else if (axis == 1) {
+        for (size_t r = 0; r < out.shape[0]; r++) {
+            for (size_t c = 0; c < out.shape[1]; c++) {
+                expected[{r, c}] = rhs[{r, 0}];
+            }
+        }
+    } else if (axis == 2) {
+        for (size_t r = 0; r < out.shape[0]; r++) {
+            for (size_t c = 0; c < out.shape[1]; c++) {
+                expected[{r, c}] = rhs[{0, 0}];
+            }
+        }
+    } else {
+        std::stringstream ss;
+        ss << "Unknown axis " << axis;
+        throw std::invalid_argument(ss.str());
     }
 
     is_close(out, expected);
 
-    broadcast(out, rhs_1);
-
-    for (size_t r = 0; r < out.shape[0]; r++) {
-        for (size_t c = 0; c < out.shape[1]; c++) {
-            expected[{r, c}] = rhs_1[{r, 0}];
-        }
+    if (axis == 2) {
+        return;
     }
 
-    is_close(out, expected);
-
-    MatrixStorage<float> out_fail_0({shape[0], shape[0]});
-    MatrixStorage<float> out_fail_1({shape[1], shape[1]});
-    throws_exception(std::invalid_argument, broadcast(out_fail_0, rhs_0));
-    throws_exception(std::invalid_argument, broadcast(out_fail_1, rhs_1));
+    // Verify that correct exceptions are thrown
+    // Test axis == 0 throws
+    // mxn op 1xn
+    shape_type shape_bcast_fail = shape;
+    shape_bcast_fail[axis] = 1;
+    shape_bcast_fail[off_axis] ++;
+    MatrixStorage<T> lhs_fail(shape);
+    MatrixStorage<T> rhs_fail(shape_bcast_fail);
+    throws_exception(std::invalid_argument, broadcast(lhs_fail, rhs_fail));
 }
 
 template <typename T> void test_mean(size_t axis) {
@@ -477,6 +500,32 @@ template <typename T> void test_select_rows_and_cols() {
     is_close(out, expected);
 }
 
+template <typename T> void test_bcast_all(size_t axis) {
+    const shape_type base_shape = {5, 5};
+
+    shape_type shape = base_shape;
+    shape[axis] = 1;
+    const shape_type bcast_shape = {1, 1};
+
+    MatrixStorage<T> lhs(shape);
+    MatrixStorage<T> rhs(bcast_shape);
+    MatrixStorage<T> out(shape);
+    MatrixStorage<T> expected(shape);
+    const T val = static_cast<T>(0.1);
+
+    fill_mat(lhs);
+    rhs[{0, 0}] = val;
+
+    for (size_t r = 0; r < shape[0]; r++) {
+        for (size_t c = 0; c < shape[1]; c++) {
+            expected[{r, c}] = lhs[{r, c}] * rhs[{0, 0}];
+        }
+    }
+
+    multiply(out, lhs, rhs);
+    is_close(out, expected);
+}
+
 int main(int argc, char **argv) {
     test_constructor<float>();
     test_move_assign<float>();
@@ -503,10 +552,14 @@ int main(int argc, char **argv) {
     test_transpose<float>();
     test_eltwise_binary_func_bcast<float>(0);
     test_eltwise_binary_func_bcast<float>(1);
-    test_broadcast<float>();
+    test_broadcast<float>(0);
+    test_broadcast<float>(1);
+    test_broadcast<float>(2);
     test_mean<float>(0);
     test_mean<float>(1);
     test_select_rows_and_cols<float>();
+    test_bcast_all<float>(0);
+    test_bcast_all<float>(1);
 
     std::cout << argv[0] << ": " << num_passed << " passed / " << num_tests << " total" << std::endl;
     return 0;
