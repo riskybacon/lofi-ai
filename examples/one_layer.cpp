@@ -1,5 +1,5 @@
 /**
- * @file bag_of_words.cpp
+ * @file one_layer.cpp
  * @brief C++ implementation of the single layer NN in makemore
  */
 #include <fstream>
