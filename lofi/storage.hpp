@@ -12,20 +12,6 @@
 
 #include <lofi/generator.hpp>
 
-namespace ReturnTypes {
-template <typename T> struct Max {
-    using value_type = T;
-
-    std::vector<value_type> values;
-    std::vector<size_t> indices;
-    size_t size_;
-
-    Max(size_t size) : values(size), indices(size), size_(size) {}
-    const size_t size() const { return size_; }
-};
-
-} // namespace ReturnTypes
-
 using shape_type = std::array<size_t, 2>;
 
 shape_type identity(shape_type &&idx) { return idx; }
@@ -779,7 +765,7 @@ template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indic
         }
 
         out[out_idx({i, 0})] = max_val;
-        out.indices[i] = max_idx;
+        indices[i] = max_idx;
     }
 }
 

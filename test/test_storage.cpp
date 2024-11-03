@@ -210,11 +210,16 @@ template <typename T> auto make_max_axis(size_t axis) {
         throw std::invalid_argument(ss.str());
     }
 
+    shape_type reduced_shape = shape;
+    reduced_shape[axis] = 1;
+    auto idxr = axis == 0 ? bcast0 : bcast1;
+
     MatrixStorage<T> src(shape);
-    ReturnTypes::Max<T> max_axis(long_dim);
-    ReturnTypes::Max<T> expected_max_axis(long_dim);
+    MatrixStorage<T> expected_values(reduced_shape);
+    std::vector<size_t> expected_indices(long_dim);
 
     auto idx_func = axis == 0 ? identity : swap_idx;
+
     T val(0);
     size_t q = 0;
 
@@ -222,8 +227,8 @@ template <typename T> auto make_max_axis(size_t axis) {
         for (size_t i = 0; i < short_dim; i++) {
             src[idx_func({q, j})] = val;
             if (i == short_dim - 1) {
-                expected_max_axis.values[j] = val;
-                expected_max_axis.indices[j] = q;
+                expected_values[idxr({j, 0})] = val;
+                expected_indices[j] = q;
             }
             val += static_cast<T>(1);
             q = (q + 1) % short_dim;
@@ -232,14 +237,20 @@ template <typename T> auto make_max_axis(size_t axis) {
         // so that the max value appears at different places
         q = (q + 1) % short_dim;
     }
-    return std::make_tuple(std::move(shape), std::move(src), std::move(max_axis), std::move(expected_max_axis));
+    return std::make_tuple(std::move(shape), std::move(src), std::move(expected_values), std::move(expected_indices));
 }
 
 template <typename T> void test_max(size_t axis) {
-    auto [shape, src, max_axis, expected_max_axis] = make_max_axis<T>(axis);
-    max(max_axis, src, axis);
-    is_close(max_axis.values, expected_max_axis.values);
-    is_close(max_axis.indices, expected_max_axis.indices);
+    auto [shape, src, expected_values, expected_indices] = make_max_axis<T>(axis);
+    shape[axis] = 1;
+
+    MatrixStorage<T> out(shape);
+    std::vector<size_t> indices(shape[axis]);
+
+    max(out, indices, src, axis);
+
+    is_close(out, expected_values);
+    is_close(indices, expected_indices);
 }
 
 template <typename T> void test_log() {
