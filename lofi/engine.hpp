@@ -69,6 +69,7 @@ template <typename T> struct Matrix {
             ctx_->data[{i, 1}] = cols[i];
         }
     }
+
     /**
      * @brief Creates a matrix with elements drawn from a normal distribution.
      *

@@ -747,35 +747,38 @@ template <typename T> void mean(MatrixStorage<T> &out, MatrixStorage<T> &in, con
     multiply(out, out, divisor);
 }
 
-template <typename T> void max(ReturnTypes::Max<T> &out, const MatrixStorage<T> &in, const size_t axis) {
-    const size_t expected_size = axis == 0 ? in.shape[1] : in.shape[0];
-
-    if (out.size() != expected_size) {
-        std::stringstream ss;
-        ss << "Expected out.size()=" << expected_size << ", got " << out.size();
-        throw std::invalid_argument(ss.str());
-    }
-
+template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indices, const MatrixStorage<T> &in, const size_t axis) {
     if (axis > 1) {
         std::stringstream ss;
         ss << "Unknown axis=" << axis;
         throw std::invalid_argument(ss.str());
     }
 
-    auto indexer = axis == 0 ? swap_idx : identity;
-    size_t non_axis = axis == 0 ? 1 : 0;
+    shape_type expected_shape = in.shape;
+    expected_shape[axis] = 1;
+    if (out.shape != expected_shape) {
+        std::stringstream ss;
+        ss << "Expected out.shape()=" << expected_shape << ", got " << out.shape;
+        throw std::invalid_argument(ss.str());
+    }
 
-    for (size_t i = 0; i < in.shape[non_axis]; i++) {
-        T max_val = in[indexer({i, 0})];
+    auto out_idx = axis == 0 ? bcast0 : bcast1;
+    auto in_idx = axis == 0 ? swap_idx : identity;
+    size_t off_axis = axis == 0 ? 1 : 0;
+    indices.resize(in.shape[off_axis]);
+
+    for (size_t i = 0; i < in.shape[off_axis]; i++) {
+        T max_val = in[in_idx({i, 0})];
         size_t max_idx = 0;
         for (size_t j = 1; j < in.shape[axis]; j++) {
-            const T in_val = in[indexer({i, j})];
+            const T in_val = in[in_idx({i, j})];
             if (in_val > max_val) {
                 max_val = in_val;
                 max_idx = j;
             }
         }
-        out.values[i] = max_val;
+
+        out[out_idx({i, 0})] = max_val;
         out.indices[i] = max_idx;
     }
 }

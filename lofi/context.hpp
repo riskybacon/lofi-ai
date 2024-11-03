@@ -33,6 +33,9 @@ template <typename T> struct Context {
     std::vector<std::shared_ptr<Context>> prev;
     ssize_t degrees = 0;
 
+    // Used for backward pass for max()
+    std::vector<size_t> indices;
+
     Context(const shape_type &shape) : data(shape), grad(shape) {}
     Context(const shape_type &shape, const std::string &label) : data(shape), grad(shape), label(label) {}
     const shape_type &shape() const { return data.shape; }
@@ -276,28 +279,22 @@ template <typename T> void mean(std::shared_ptr<Context<T>> &out, std::shared_pt
     };
 }
 
-#if 0
 template <typename T>
-void max(std::shared_ptr<ReturnTypes::Max<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
-    max(out, lhs->data, rhs->data, axis);
+void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
+    max(out->data, out->indices, lhs->data, axis);
     out->prev = {lhs};
     lhs->degrees++;
     std::stringstream ss;
     ss << "max(axis=" << axis << ")";
     out->op = ss.str();
     out->backward = [out, lhs, axis]() {
-        auto num_classes = out->indices.size();
-        MatrixStorage<T> oh({oh_rows, oh_cols});
-        one_hot(oh, out->indices)
-        cols = 
-        MatrixStorage<T> oh()
-        auto oh = one_hot(out.indicies, )
-    }
-    // max(out, rhs, axis);
-    // out->prev = {lhs};
-    // out->op = "max";
+        // route the gradient from out to the correct column in lhs
+        MatrixStorage<T> one_h(lhs->shape);
+        one_hot(one_h, out->indices);
+        multiply(one_h, one_h, out->grad);
+        add(lhs->grad, lhs->grad, one_h);
+    };
 }
-#endif
 
 template <typename T, typename Func> void bfs(std::shared_ptr<Context<T>> &root, Func func) {
     using ptr_t = std::shared_ptr<Context<T>>;
