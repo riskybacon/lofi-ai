@@ -53,7 +53,7 @@ read_file(const std::string &filename) {
     std::unordered_map<char, int> stoi;
     std::unordered_map<int, char> itos;
 
-    for (int i = 0; i < chars.size(); i++) {
+    for (size_t i = 0; i < chars.size(); i++) {
         stoi[chars[i]] = i;
         itos[i] = chars[i];
     }

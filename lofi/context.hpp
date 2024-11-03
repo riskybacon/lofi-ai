@@ -41,6 +41,67 @@ template <typename T> struct Context {
     const shape_type &shape() const { return data.shape; }
 };
 
+template <typename T, typename U>
+std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>> make_weak(std::shared_ptr<Context<T>> &a,
+                                                                           std::shared_ptr<Context<U>> &b) {
+    return std::make_tuple(std::weak_ptr<Context<T>>(a), std::weak_ptr<Context<U>>(b));
+}
+
+template <typename T, typename U, typename V>
+std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>, std::weak_ptr<Context<V>>>
+make_weak(std::shared_ptr<Context<T>> &a, std::shared_ptr<Context<U>> &b, std::shared_ptr<Context<V>> &c) {
+    return std::make_tuple(std::weak_ptr<Context<T>>(a), std::weak_ptr<Context<U>>(b), std::weak_ptr<Context<V>>(c));
+}
+
+template <typename T, typename U>
+std::tuple<std::shared_ptr<Context<T>>, std::shared_ptr<Context<U>>>
+lock_weak(std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>> weak) {
+    std::shared_ptr<Context<T>> a;
+    std::shared_ptr<Context<U>> b;
+
+    if (auto a0 = std::get<0>(weak).lock()) {
+        a = a0;
+    } else {
+        throw std::runtime_error("weak_ptr is expired");
+    }
+
+    if (auto b0 = std::get<1>(weak).lock()) {
+        b = b0;
+    } else {
+        throw std::runtime_error("weak_ptr is expired");
+    }
+
+    return std::make_tuple(a, b);
+}
+
+template <typename T, typename U, typename V>
+std::tuple<std::shared_ptr<Context<T>>, std::shared_ptr<Context<U>>, std::shared_ptr<Context<V>>>
+lock_weak(std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>, std::weak_ptr<Context<V>>> weak) {
+    std::shared_ptr<Context<T>> a;
+    std::shared_ptr<Context<U>> b;
+    std::shared_ptr<Context<V>> c;
+
+    if (auto a0 = std::get<0>(weak).lock()) {
+        a = a0;
+    } else {
+        throw std::runtime_error("weak_ptr is expired");
+    }
+
+    if (auto b0 = std::get<1>(weak).lock()) {
+        b = b0;
+    } else {
+        throw std::runtime_error("weak_ptr is expired");
+    }
+
+    if (auto c0 = std::get<2>(weak).lock()) {
+        c = c0;
+    } else {
+        throw std::runtime_error("weak_ptr is expired");
+    }
+
+    return std::make_tuple(a, b, c);
+}
+
 /**
  * @brief element-wise addition of two matrices
  */
@@ -51,7 +112,9 @@ void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std
     lhs->degrees++;
     rhs->degrees++;
     out->op = "+";
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs, rhs);
+    out->backward = [weak]() {
+        auto [out, lhs, rhs] = lock_weak(weak);
         add(lhs->grad, lhs->grad, out->grad);
         add(rhs->grad, rhs->grad, out->grad);
     };
@@ -68,7 +131,9 @@ void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     rhs->degrees++;
     out->op = "-";
 
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs, rhs);
+    out->backward = [weak]() {
+        auto [out, lhs, rhs] = lock_weak(weak);
         add(lhs->grad, lhs->grad, out->grad);
         add(rhs->grad, rhs->grad, out->grad);
     };
@@ -84,8 +149,10 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     lhs->degrees++;
     rhs->degrees++;
     out->op = "*";
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs, rhs);
+    out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
+        auto [out, lhs, rhs] = lock_weak(weak);
         MatrixStorage<T> lhs_grad(lhs->grad.shape);
         MatrixStorage<T> rhs_grad(rhs->grad.shape);
         multiply(lhs_grad, rhs->data, out->grad);
@@ -105,8 +172,10 @@ void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     lhs->degrees++;
     rhs->degrees++;
     out->op = "/";
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs, rhs);
+    out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
+        auto [out, lhs, rhs] = lock_weak(weak);
         MatrixStorage<T> lhs_grad(lhs->grad.shape);
         MatrixStorage<T> rhs_grad(rhs->grad.shape);
         divide(rhs_grad, lhs->data, out->grad);
@@ -126,7 +195,9 @@ void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     lhs->degrees++;
     rhs->degrees++;
     out->op = "@";
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs, rhs);
+    out->backward = [weak]() {
+        auto [out, lhs, rhs] = lock_weak(weak);
         const auto &l_shape = lhs->data.shape;
         const auto &r_shape = rhs->data.shape;
 
@@ -155,8 +226,10 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "tanh";
-    out->backward = [out, lhs]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak]() {
         // lhs->grad += (1 - out->data * out->data) * out->grad;
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<T> out2(out->data.shape);
         MatrixStorage<T> ones({out2.shape, static_cast<T>(1)});
         multiply(out2, out->data, out->data);
@@ -174,8 +247,10 @@ template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "exp";
-    out->backward = [out, lhs]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak]() {
         // lhs->grad += out->data * out->grad;
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<T> tmp(out->data.shape);
         multiply(lhs->grad, out->data, out->grad);
         add(lhs->grad, lhs->grad, tmp);
@@ -190,10 +265,12 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "log";
-    out->backward = [out, lhs]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak]() {
         // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1201
         // lhs->grad += (1 / lhs->data) * out->grad;
         // or lhs->grad += (out->grad / lhs->data)
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<T> out2(out->data.shape);
         divide(out2, out->grad, lhs->data);
         add(lhs->grad, lhs->grad, out2);
@@ -210,8 +287,10 @@ template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr
     std::stringstream ss;
     ss << "pow(" << rhs << ")";
     out->op = ss.str();
-    out->backward = [out, lhs, rhs]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, rhs]() {
         // lhs->grad += rhs * std::pow(lhs->data, rhs - 1) * out->grad;
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<float> tmp({lhs->shape()});
         pow(tmp, lhs->data, rhs - static_cast<T>(1));
         multiply(tmp, rhs, tmp);
@@ -225,12 +304,14 @@ template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr
  */
 template <typename T, typename U>
 void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs,
-                          const std::shared_ptr<Context<U>> &idx) {
+                          std::shared_ptr<Context<U>> &idx) {
     select_rows_and_cols(out->data, lhs->data, idx->data);
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "select";
-    out->backward = [out, lhs, idx]() {
+    auto weak = make_weak(out, lhs, idx);
+    out->backward = [weak]() {
+        auto [out, lhs, idx] = lock_weak(weak);
         const size_t rows = idx->shape()[0];
         const MatrixStorage<U> &idx_d = idx->data;
 
@@ -253,9 +334,11 @@ template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr
     ss << "sum(" << axis << ")";
     out->op = ss.str();
 
-    out->backward = [out, lhs]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak]() {
         // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1746
         // lhs->grad += ones_like(lhs->data) * out->grad
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<T> tmp(lhs->shape(), 1);
         multiply(tmp, tmp, out->grad);
         add(lhs->grad, lhs->grad, tmp);
@@ -270,8 +353,10 @@ template <typename T> void mean(std::shared_ptr<Context<T>> &out, std::shared_pt
     ss << "mean(" << axis << ")";
     out->op = ss.str();
 
-    out->backward = [out, lhs, axis]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, axis]() {
         // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=884
+        auto [out, lhs] = lock_weak(weak);
         const T divisor = static_cast<T>(1) / static_cast<T>(lhs->shape()[axis]);
         MatrixStorage<T> tmp({out->grad.shape});
         multiply(tmp, out->grad, divisor);
@@ -287,8 +372,10 @@ void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
     std::stringstream ss;
     ss << "max(axis=" << axis << ")";
     out->op = ss.str();
-    out->backward = [out, lhs, axis]() {
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, axis]() {
         // route the gradient from out to the correct column in lhs
+        auto [out, lhs] = lock_weak(weak);
         MatrixStorage<T> one_h(lhs->shape);
         one_hot(one_h, out->indices);
         multiply(one_h, one_h, out->grad);

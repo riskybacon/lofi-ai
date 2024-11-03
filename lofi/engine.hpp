@@ -244,7 +244,7 @@ template <typename T> struct Matrix {
     void backward() { ::backward(ctx_); }
     void zero_grad() { ::zero_grad(ctx_); }
 
-    template <typename U> Matrix operator[](const Matrix<U> &idx) {
+    template <typename U> Matrix operator[](Matrix<U> &idx) {
         Matrix out({idx.shape()[0], 1});
         ::select_rows_and_cols(out.ctx_, ctx_, idx.ctx_);
         return out;

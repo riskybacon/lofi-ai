@@ -235,7 +235,7 @@ template <typename T> struct MatrixStorage {
 
     const value_type &operator[](const shape_type &idx) const { return data[offset(idx)]; }
 
-    template <typename U> MatrixStorage operator[](const MatrixStorage<U> &idx) {
+    template <typename U> MatrixStorage operator[](MatrixStorage<U> &idx) {
         MatrixStorage out({idx.shape[0], 1});
         select_rows_and_cols(out, *this, idx);
         return out;
