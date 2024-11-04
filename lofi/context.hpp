@@ -41,65 +41,42 @@ template <typename T> struct Context {
     const shape_type &shape() const { return data.shape; }
 };
 
-template <typename T, typename U>
-std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>> make_weak(std::shared_ptr<Context<T>> &a,
-                                                                           std::shared_ptr<Context<U>> &b) {
-    return std::make_tuple(std::weak_ptr<Context<T>>(a), std::weak_ptr<Context<U>>(b));
+/**
+ * @brief Convert a single shared pointer into a weak pointer
+ */
+template <typename T>
+auto make_one_weak(const std::shared_ptr<T>& sp) {
+    return std::weak_ptr<T>(sp);
 }
 
-template <typename T, typename U, typename V>
-std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>, std::weak_ptr<Context<V>>>
-make_weak(std::shared_ptr<Context<T>> &a, std::shared_ptr<Context<U>> &b, std::shared_ptr<Context<V>> &c) {
-    return std::make_tuple(std::weak_ptr<Context<T>>(a), std::weak_ptr<Context<U>>(b), std::weak_ptr<Context<V>>(c));
+/**
+ * @brief Convert N shared pointers into N weak pointers
+ */
+template <typename... Args>
+auto make_weak(Args... shared_ptrs) {
+    return std::make_tuple(make_one_weak(shared_ptrs)...);
 }
 
-template <typename T, typename U>
-std::tuple<std::shared_ptr<Context<T>>, std::shared_ptr<Context<U>>>
-lock_weak(std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>> weak) {
-    std::shared_ptr<Context<T>> a;
-    std::shared_ptr<Context<U>> b;
-
-    if (auto a0 = std::get<0>(weak).lock()) {
-        a = a0;
+/**
+ * @brief Convert a single weak pointer into a shared pointer
+ */
+template <typename T>
+auto lock_one_weak(const std::weak_ptr<T>& wp) {
+    if (auto sp = wp.lock()) {
+        return sp;
     } else {
         throw std::runtime_error("weak_ptr is expired");
     }
-
-    if (auto b0 = std::get<1>(weak).lock()) {
-        b = b0;
-    } else {
-        throw std::runtime_error("weak_ptr is expired");
-    }
-
-    return std::make_tuple(a, b);
 }
 
-template <typename T, typename U, typename V>
-std::tuple<std::shared_ptr<Context<T>>, std::shared_ptr<Context<U>>, std::shared_ptr<Context<V>>>
-lock_weak(std::tuple<std::weak_ptr<Context<T>>, std::weak_ptr<Context<U>>, std::weak_ptr<Context<V>>> weak) {
-    std::shared_ptr<Context<T>> a;
-    std::shared_ptr<Context<U>> b;
-    std::shared_ptr<Context<V>> c;
-
-    if (auto a0 = std::get<0>(weak).lock()) {
-        a = a0;
-    } else {
-        throw std::runtime_error("weak_ptr is expired");
-    }
-
-    if (auto b0 = std::get<1>(weak).lock()) {
-        b = b0;
-    } else {
-        throw std::runtime_error("weak_ptr is expired");
-    }
-
-    if (auto c0 = std::get<2>(weak).lock()) {
-        c = c0;
-    } else {
-        throw std::runtime_error("weak_ptr is expired");
-    }
-
-    return std::make_tuple(a, b, c);
+/**
+ * @brief Convert N weak pointers into N shared pointers
+ */
+template <typename... Ts>
+auto lock_weak(const std::tuple<std::weak_ptr<Ts>...>& weak_tuple) {
+    return std::apply([](const auto&... weak_ptrs) {
+        return std::make_tuple(lock_one_weak(weak_ptrs)...);
+    }, weak_tuple);
 }
 
 /**
