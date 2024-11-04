@@ -21,7 +21,7 @@ machine learning frameworks. I'm specifically interested in CUDA support.
 *Basic Operations*: Matrix operations like addition, multiplication, transpose,
 and elementwise transformations.
 
-*Broadcasting*: Row and column vectors can be broadcast match the dimensions of
+*Broadcasting*: Row and column vectors can be broadcast to match the dimensions of
 other matrices.
 
 *Autograd*: Backward pass differentiation is performed automatically, with the
