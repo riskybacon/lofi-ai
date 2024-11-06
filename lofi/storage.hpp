@@ -55,6 +55,19 @@ template <size_t DIM> std::ostream &operator<<(std::ostream &out, const std::arr
     return out;
 }
 
+void throw_unexpected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
+    std::stringstream ss;
+    ss << "[" << file << ":" << line << "] : Expected shape=" << expected << ", got " << actual;
+}
+
+void _assert_expected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
+    if (actual != expected) {
+        throw_unexpected_shape(actual, expected, file, line);
+    }
+}
+
+#define assert_expected_shape(a, b) _assert_expected_shape(a, b, __FILE__, __LINE__)
+
 template <typename T> struct MatrixStorage {
     using value_type = T;
     using shape_type = std::array<size_t, 2>;
@@ -786,6 +799,94 @@ void select_rows_and_cols(MatrixStorage<T> &lhs, MatrixStorage<T> &rhs, const Ma
     const size_t rows = static_cast<size_t>(idx.shape[0]);
     for (size_t i = 0; i < rows; i++) {
         lhs[{i, 0}] = rhs[{idx[{i, 0}], idx[{i, 1}]}];
+    }
+}
+
+shape_type select_embeddings_shape(const shape_type &a, const shape_type &b) { return shape_type({b[0], b[1] * a[1]}); }
+
+/**
+ * @brief selects embeddings from the embeddding table defined by x
+ *
+ * The embedding table takes a set of `m` tokens and embeds them into a lower
+ * `n` dimensionsal space.
+ *
+ * Thus, the embeddings table, `emb` is an `m` x `n` matrix. Each row
+ * corresponds to a token, and the `n` columns correspond to the
+ * dimensionality of each token's embedding. Each element in the row is where
+ * that token is in that dimension.
+ *
+ * `x` is a `i` x `j` matrix where each row corresponds to a context block, or
+ * a list of `j` tokens. Each element corresponds to a row index in the
+ * embeddings table.
+ *
+ * The output matrix will have shape `i` x (`j` * `n`):
+ * * Same number of rows as x, which is one row for each context block
+ * * `j` x `n` columns, which is the number of dimensions for each token x
+ *   the number of tokens in a context block
+ *
+ * @param selected  the embeddings selected from the `emb` matrix by `x`. This
+ *                  matrix must have shape (`i` x (`j` * `n`))
+ * @param emb the embeddings table. This contains the lower dimensional
+ *            representation of the tokens in a `m` x `n` matrix. There are
+ *            `m` tokens and `n` dimensions
+ * @param x the embeddings to select from emb. This is an `i` by `j` matrix,
+ *          where each row corresponds to a context block, and `j` is the
+ *          number of tokens in a single context block
+ */
+template <typename T>
+void select_embeddings(MatrixStorage<T> &selected, const MatrixStorage<T> &emb, const MatrixStorage<size_t> &x) {
+    // Dimensionality / number of values in a single embedding
+    size_t dims = emb.shape[1]; // Number of dimensions for each embedding
+    size_t x_rows = x.shape[0]; // Number of context blocks
+    size_t x_cols = x.shape[1]; // Size of each context
+
+    assert_expected_shape(selected.shape, shape_type({x_rows, x_cols * dims}));
+
+    for (size_t x_row = 0; x_row < x_rows; x_row++) {
+        for (size_t x_col = 0; x_col < x_cols; x_col++) {
+            const size_t token = x[{x_row, x_col}];
+
+            if (token >= emb.shape[0]) {
+                std::stringstream ss;
+                ss << "Token out of bounds: {token=" << token << "}, >= emb.shape[0]=" << emb.shape[0];
+                throw std::invalid_argument(ss.str());
+            }
+            // Fill in the return embedding matrix, flattening out
+            // the last 2 dimensions into a single row
+            int offset = x_col * dims;
+            for (size_t i = 0; i < dims; i++) {
+                selected[{x_row, offset + i}] = emb[{token, i}];
+            }
+        }
+    }
+}
+
+/**
+ * @brief backwards pass for select_embeddings
+ *
+ * @param demb  output: the gradient to be applied to emb. Must be an `m` x `n`
+ *              matrix
+ * @param dselected  dL/dselected, this matrix must have shape
+ *            (`i` x (`j` * `n`))
+ * @param x the embeddings to select from emb. This is an `i` by `j` matrix,
+ *          where each row corresponds to a context block, and `j` is the
+ *          number of tokens in a single context block
+ */
+template <typename T>
+void select_embeddings_bwd(MatrixStorage<T> &demb, const MatrixStorage<T> &dselected, const MatrixStorage<size_t> &x) {
+    // Dimensionality / number of values in a single embedding
+    size_t dims = demb.shape[1];
+    fill_value(demb, static_cast<T>(0));
+
+    // Route the gradient from dselected into demb
+    for (size_t r = 0; r < x.shape[0]; r++) {
+        for (size_t c = 0; c < x.shape[1]; c++) {
+            const auto token = x[{r, c}];
+            const auto offset = c * dims;
+            for (size_t d = 0; d < dims; d++) {
+                demb[{token, d}] += dselected[{r, d + offset}];
+            }
+        }
     }
 }
 

@@ -537,6 +537,82 @@ template <typename T> void test_bcast_all(size_t axis) {
     is_close(out, expected);
 }
 
+template <typename T> void test_select_embeddings() {
+    // Create an embedding matrix, vocab size 10, embedding dim 3
+    MatrixStorage<T> emb({10, 3});
+
+    T emb_val(0);
+    for (size_t row = 0; row < emb.shape[0]; row++) {
+        for (size_t col = 0; col < emb.shape[1]; col++) {
+            emb[{row, col}] = emb_val;
+            emb_val += static_cast<T>(1);
+        }
+    }
+
+    // Create a selector - context block size 2
+    MatrixStorage<size_t> x({5, 2});
+    size_t select_val = 0;
+    for (size_t row = 0; row < x.shape[0]; row++) {
+        for (size_t col = 0; col < x.shape[1]; col++) {
+            x[{row, col}] = select_val;
+            select_val = (select_val + 1) % emb.shape[0];
+        }
+    }
+
+    // Select embeddings
+    const auto selected_shape = select_embeddings_shape(emb.shape, x.shape);
+    MatrixStorage<T> selected(selected_shape);
+
+    // Construct expected matrix
+    MatrixStorage<T> expected(selected_shape);
+    T expected_val = 0;
+    for (size_t row = 0; row < expected.shape[0]; row++) {
+        for (size_t col = 0; col < expected.shape[1]; col++) {
+            expected[{row, col}] = expected_val;
+            expected_val += 1;
+        }
+    }
+
+    // Validate selection
+    select_embeddings(selected, emb, x);
+
+    is_close(selected, expected);
+}
+
+
+template<typename T>
+void test_select_embeddings_bwd() {
+    // Create an embedding matrix, vocab size 10, embedding dim 3
+    MatrixStorage<T> demb({10, 3});
+    // Create a selector - context block size 2
+    MatrixStorage<size_t> x({10, 2});
+    MatrixStorage<T> dselected({x.shape[0], x.shape[1] * demb.shape[1]});
+
+    size_t select_val = 0;
+    for (size_t row = 0; row < x.shape[0]; row++) {
+        for (size_t col = 0; col < x.shape[1]; col++) {
+            x[{row, col}] = select_val;
+            select_val = (select_val + 1) % demb.shape[0];
+        }
+    }
+
+    for (size_t row = 0; row < dselected.shape[0]; row++) {
+        for (size_t col = 0; col < dselected.shape[1]; col++) {
+            dselected[{row, col}] = static_cast<T>(1);
+        }
+    }
+
+    MatrixStorage<T> expected({10, 3});
+    for (size_t row = 0; row < expected.shape[0]; row++) {
+        for (size_t col = 0; col < expected.shape[1]; col++) {
+            expected[{row,col}] = static_cast<T>(2);
+        }
+    }
+
+    select_embeddings_bwd(demb, dselected, x);
+    is_close(demb, expected);
+}
+
 int main(int argc, char **argv) {
     test_constructor<float>();
     test_move_assign<float>();
@@ -571,6 +647,9 @@ int main(int argc, char **argv) {
     test_select_rows_and_cols<float>();
     test_bcast_all<float>(0);
     test_bcast_all<float>(1);
+
+    test_select_embeddings<float>();
+    test_select_embeddings_bwd<float>();
 
     std::cout << argv[0] << ": " << num_passed << " passed / " << num_tests << " total" << std::endl;
     return 0;
