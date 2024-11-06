@@ -58,8 +58,8 @@ template <typename T> struct Matrix {
         return mat;
     }
 
-    Matrix(const std::vector<size_t> &rows, std::vector<size_t> &cols)
-    : ctx_(std::make_shared<context_type>(shape_type({rows.size(), 2}))) {
+    Matrix(const std::vector<size_t> &rows, const std::vector<size_t> &cols)
+        : ctx_(std::make_shared<context_type>(shape_type({rows.size(), 2}))) {
         if (rows.size() != cols.size()) {
             throw std::invalid_argument("rows and cols must have the same size");
         }
@@ -67,6 +67,38 @@ template <typename T> struct Matrix {
         for (size_t i = 0; i < rows.size(); i++) {
             ctx_->data[{i, 0}] = rows[i];
             ctx_->data[{i, 1}] = cols[i];
+        }
+    }
+
+    Matrix(const std::vector<size_t> &rows, const Matrix<size_t> &cols)
+        : ctx_(std::make_shared<context_type>(shape_type({rows.size(), 2}))) {
+        if (rows.size() != cols.shape()[0]) {
+            throw std::invalid_argument("rows and cols must have the same size");
+        }
+
+        if (cols.shape()[1] != 1) {
+            throw std::invalid_argument("cols must be a m x 1 matrix");
+        }
+
+        for (size_t i = 0; i < rows.size(); i++) {
+            ctx_->data[{i, 0}] = rows[i];
+            ctx_->data[{i, 1}] = cols[{i, 0}];
+        }
+    }
+
+    Matrix(Matrix<size_t> &rows, const Matrix<size_t> &cols)
+        : ctx_(std::make_shared<context_type>(shape_type({rows.shape()[0], 2}))) {
+        if (rows.shape()[0] != cols.shape()[0]) {
+            throw std::invalid_argument("rows and cols must have the same size");
+        }
+
+        if (rows.shape()[1] != 1 || cols.shape()[1] != 1) {
+            throw std::invalid_argument("rows and cols must be m x 1 matrices");
+        }
+
+        for (size_t i = 0; i < rows.shape()[0]; i++) {
+            ctx_->data[{i, 0}] = rows[{i, 0}];
+            ctx_->data[{i, 1}] = cols[{i, 0}];
         }
     }
 
@@ -133,6 +165,22 @@ template <typename T> struct Matrix {
         *this += rhs;
         return *this;
     }
+
+    Matrix operator-(Matrix &rhs) {
+        Matrix out(shape());
+        subtract(out.ctx_, ctx_, rhs.ctx_);
+        return out;
+    }
+
+    Matrix operator-(Matrix &&rhs) { return *this - rhs; }
+
+    Matrix operator-(const value_type &rhs) {
+        Matrix out(shape(), std::to_string(rhs));
+        subtract(out.ctx_, ctx_, rhs);
+        return out;
+    }
+
+    Matrix operator-(const value_type &&rhs) { return *this - rhs; }
 
     Matrix operator*(Matrix &rhs) {
         Matrix out(shape());
@@ -267,6 +315,10 @@ template <typename T> struct Matrix {
         return out;
     }
 
+    value_type &operator[](const shape_type &idx) { return data()[idx]; }
+
+    const value_type &operator[](const shape_type &idx) const { return data()[idx]; }
+
     // Convenience methods to make updating context easy with similar api as original micrograd
     MatrixStorage<T> &data() { return ctx_->data; }
     const MatrixStorage<T> &data() const { return ctx_->data; }
@@ -325,6 +377,13 @@ template <typename T> Matrix<T> operator*(const T &lhs, const Matrix<T> &rhs) {
     Matrix<T> out(rhs.shape());
     multiply(out.ctx_, lhs, rhs.ctx_);
     return out;
+}
+
+template <typename T> Matrix<T> select_embeddings(Matrix<T> &emb, Matrix<size_t> &x) {
+    const shape_type shape = select_embeddings_shape(emb.shape(), x.shape());
+    Matrix<T> selected(shape);
+    select_embeddings(selected.ctx_, emb.ctx_, x.ctx_);
+    return selected;
 }
 
 template <typename T> void normalize_probabilities(std::vector<T> &probs) {

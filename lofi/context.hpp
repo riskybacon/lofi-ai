@@ -210,7 +210,7 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
         MatrixStorage<T> out2(out->data.shape);
         MatrixStorage<T> ones({out2.shape, static_cast<T>(1)});
         multiply(out2, out->data, out->data);
-        subtract(out2, 1, out2);
+        subtract(out2, static_cast<T>(1), out2);
         multiply(out2, out2, out->grad);
         add(lhs->grad, lhs->grad, out2);
     };
@@ -370,7 +370,7 @@ void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
     out->backward = [weak, axis]() {
         // route the gradient from out to the correct column in lhs
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> one_h(lhs->shape);
+        MatrixStorage<T> one_h(lhs->shape());
         one_hot(one_h, out->indices);
         multiply(one_h, one_h, out->grad);
         add(lhs->grad, lhs->grad, one_h);
@@ -423,7 +423,9 @@ template <typename T, typename Func> void topo(std::shared_ptr<Context<T>> &root
         }
     }
 }
+
 template <typename T> void backward(std::shared_ptr<Context<T>> &root) {
+    root->grad = static_cast<T>(1);
     topo(root, [](auto &ctx) { ctx->backward(); });
 }
 
