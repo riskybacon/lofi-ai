@@ -511,6 +511,43 @@ template <typename T> void test_select_rows_and_cols() {
     is_close(out, expected);
 }
 
+template <typename T> void test_broadcast_rows() {
+    MatrixStorage<T> src({3, 3});
+
+    src[{0, 0}] = 1;
+    src[{0, 1}] = 2;
+    src[{0, 2}] = 3;
+    src[{1, 0}] = 4;
+    src[{1, 1}] = 5;
+    src[{1, 2}] = 6;
+    src[{2, 0}] = 7;
+    src[{2, 1}] = 8;
+    src[{2, 2}] = 9;
+
+    MatrixStorage<size_t> idx({2, 1});
+    idx[{0, 0}] = 2;
+    idx[{1, 0}] = 0;
+
+    MatrixStorage<float> dst({2, 3});
+
+    broadcast_rows(dst, src, idx, assign_op<T>);
+
+    MatrixStorage<T> expected({2, 3});
+    expected[{0, 0}] = 7;
+    expected[{0, 1}] = 8;
+    expected[{0, 2}] = 9;
+    expected[{1, 0}] = 1;
+    expected[{1, 1}] = 2;
+    expected[{1, 2}] = 3;
+
+    is_close(dst, expected);
+
+    dst = static_cast<T>(1);
+    expected += static_cast<T>(1);
+    broadcast_rows(dst, src, idx, accumulate_op<T>);
+    is_close(dst, expected);
+}
+
 template <typename T> void test_bcast_all(size_t axis) {
     const shape_type base_shape = {5, 5};
 
@@ -645,6 +682,7 @@ int main(int argc, char **argv) {
     test_mean<float>(0);
     test_mean<float>(1);
     test_select_rows_and_cols<float>();
+    test_broadcast_rows<float>();
     test_bcast_all<float>(0);
     test_bcast_all<float>(1);
 

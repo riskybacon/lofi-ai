@@ -245,9 +245,18 @@ template <typename T> struct Matrix {
     void zero_grad() { ::zero_grad(ctx_); }
 
     template <typename U> Matrix operator[](Matrix<U> &idx) {
-        Matrix out({idx.shape()[0], 1});
-        ::select_rows_and_cols(out.ctx_, ctx_, idx.ctx_);
-        return out;
+        if (idx.shape()[1] == 2) {
+            Matrix out({idx.shape()[0], 1});
+            ::select_rows_and_cols(out.ctx_, ctx_, idx.ctx_);
+            return out;
+        } else if (idx.shape()[0] >= 1 && idx.shape()[1] == 1) {
+            Matrix out({idx.shape()[0], shape()[1]});
+            ::broadcast_rows(out.ctx_, ctx_, idx.ctx_);
+            return out;
+        }
+        std::stringstream ss;
+        ss << "Unsupported shape " << idx.shape();
+        throw std::invalid_argument(ss.str());
     }
 
     Matrix mean(size_t axis) {

@@ -301,6 +301,23 @@ void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Cont
 }
 
 /**
+ * @brief broads rows from one matrix to another matrix
+ */
+template <typename T, typename U>
+void broadcast_rows(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &src,
+                    std::shared_ptr<Context<U>> &idx) {
+    broadcast_rows(out->data, src->data, idx->data, assign_op<T>);
+    out->prev = {src};
+    src->degrees++;
+    out->op = "broadcast";
+    auto weak = make_weak(out, src, idx);
+    out->backward = [weak]() {
+        auto [out, src, idx] = lock_weak(weak);
+        broadcast_rows(src->grad, out->grad, idx->data, accumulate_op<T>);
+    };
+}
+
+/**
  * @brief sum a matrix along an axis
  */
 template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {

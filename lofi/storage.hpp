@@ -14,6 +14,10 @@
 
 using shape_type = std::array<size_t, 2>;
 
+template <typename T> void assign_op(T &lhs, const T &rhs) { lhs = rhs; }
+
+template <typename T> void accumulate_op(T &lhs, const T &rhs) { lhs += rhs; }
+
 shape_type identity(shape_type &&idx) { return idx; }
 
 shape_type swap_idx(shape_type &&idx) { return shape_type({idx[1], idx[0]}); }
@@ -124,6 +128,11 @@ template <typename T> struct MatrixStorage {
     }
 
     MatrixStorage &operator+=(const MatrixStorage &rhs) {
+        add(*this, *this, rhs);
+        return *this;
+    }
+
+    MatrixStorage &operator+=(const value_type &rhs) {
         add(*this, *this, rhs);
         return *this;
     }
@@ -799,6 +808,51 @@ void select_rows_and_cols(MatrixStorage<T> &lhs, MatrixStorage<T> &rhs, const Ma
     const size_t rows = static_cast<size_t>(idx.shape[0]);
     for (size_t i = 0; i < rows; i++) {
         lhs[{i, 0}] = rhs[{idx[{i, 0}], idx[{i, 1}]}];
+    }
+}
+
+/**
+ * @brief Broadcast rows from the source matrix and assigns them to the destination matrix.
+ *
+ * This function broadcasts rows from the source matrix `src` based on the indices provided
+ * in the `idx` matrix and assigns them to the destination matrix `dst`. The `idx` matrix
+ * should contain row indices that specify which rows to select from `src`.
+ *
+ * @tparam T The data type of the elements in the source and destination matrices.
+ * @tparam U The data type of the elements in the index matrix.
+ * @param dst The destination matrix where the broadcast rows will be stored. It should have
+ *            the same number of columns as `src` and the same number of rows as `idx`.
+ * @param src The source matrix from which rows will be selected. It should have the same
+ *            number of columns as `dst`.
+ * @param idx The index matrix containing the row indices to select from `src`. It should
+ *            have one column and the same number of rows as `dst`.
+ * @param func A function that takes the src element and applies it to the dst element.
+ *             For example, if `assign_op` is used, then lhs = rhs. If `accumulate_op` is
+ *             used, then lhs += rhs.
+ *
+ * @throws std::invalid_argument If the shape of `idx` is not (n, 1).
+ * @throws std::invalid_argument If the number of columns in `dst` does not match the number
+ *                               of columns in `src`.
+ */
+template <typename T, typename U, typename Func, typename std::enable_if<std::is_integral<U>::value, int>::type = 0>
+void broadcast_rows(MatrixStorage<T> &dst, MatrixStorage<T> &src, const MatrixStorage<U> &idx, Func func) {
+    if (idx.shape[1] != 1) {
+        std::stringstream ss;
+        ss << "Expected idx.shape=(n,1), got " << idx.shape;
+        throw std::invalid_argument(ss.str());
+    }
+
+    if (dst.shape[1] != src.shape[1]) {
+        std::stringstream ss;
+        ss << "Expected dst.shape=(n," << src.shape[1] << "), got " << dst.shape;
+        throw std::invalid_argument(ss.str());
+    }
+
+    for (size_t dst_r = 0; dst_r < dst.shape[0]; dst_r++) {
+        const size_t src_r = idx[{dst_r, 0}];
+        for (size_t c = 0; c < src.shape[1]; c++) {
+            func(dst[{dst_r, c}], src[{src_r, c}]);
+        }
     }
 }
 
