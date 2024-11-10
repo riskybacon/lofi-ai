@@ -379,10 +379,10 @@ template <typename T> Matrix<T> operator*(const T &lhs, const Matrix<T> &rhs) {
     return out;
 }
 
-template <typename T> Matrix<T> select_embeddings(Matrix<T> &emb, Matrix<size_t> &x) {
+template <typename T, typename U> Matrix<T> select_embeddings(Matrix<T> &emb, Matrix<U> &x) {
     const shape_type shape = select_embeddings_shape(emb.shape(), x.shape());
     Matrix<T> selected(shape);
-    select_embeddings(selected.ctx_, emb.ctx_, x.ctx_);
+    ::select_embeddings(selected.ctx_, emb.ctx_, x.ctx_);
     return selected;
 }
 

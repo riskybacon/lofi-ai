@@ -300,6 +300,23 @@ void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Cont
     };
 }
 
+template <typename T, typename U>
+void select_embeddings(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &emb,
+                       std::shared_ptr<Context<U>> &idx) {
+    select_embeddings(out->data, emb->data, idx->data);
+    out->prev = {emb};
+    emb->degrees++;
+    out->op = "select";
+    auto weak = make_weak(out, emb);
+    out->backward = [weak, idx]() {
+        // Note: idx is captured by value, which increments the refcount
+        auto [out, emb] = lock_weak(weak);
+        select_embeddings_bwd(emb->grad, out->grad, idx->data);
+        // Force a decrement of idx at the end of this lambda
+        // idx.reset();
+    };
+}
+
 /**
  * @brief broads rows from one matrix to another matrix
  */
