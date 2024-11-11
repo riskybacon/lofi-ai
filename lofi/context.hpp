@@ -153,12 +153,16 @@ void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
         auto [out, lhs, rhs] = lock_weak(weak);
-        MatrixStorage<T> lhs_grad(lhs->grad.shape);
-        MatrixStorage<T> rhs_grad(rhs->grad.shape);
-        divide(rhs_grad, lhs->data, out->grad);
-        divide(lhs_grad, rhs->data, out->grad);
-        add(lhs->grad, lhs->grad, lhs_grad);
-        add(rhs->grad, rhs->grad, rhs_grad);
+
+        // Gradient with respect to lhs (x): ∂(x/y)/∂x = 1/y
+        // Gradient with respect to rhs (y): ∂(x/y)/∂y = -x/y^2
+        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
+            T g = out->grad.data[i];
+            T x = lhs->data.data[i];
+            T y = static_cast<T>(1) / rhs->data.data[i];
+            lhs->grad.data[i] += g * y;
+            rhs->grad.data[i] -= x * g * y * y;
+        }
     };
 }
 

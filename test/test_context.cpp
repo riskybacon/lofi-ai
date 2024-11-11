@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
     test_add_bcast_0<float>();
     test_add_bcast_1<float>();
     test_multiply<float>();
-    test_divide<float>();
+    test_divide<float>();  // failing, need to revisit
     test_matmul<float>();
     test_mean<float>(0);
     test_mean<float>(1);
