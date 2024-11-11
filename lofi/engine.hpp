@@ -289,7 +289,7 @@ template <typename T> struct Matrix {
         return out;
     }
 
-    void backward() { ::backward(ctx_); }
+    void backward(bool first_grad_to_one = true) { ::backward(ctx_, first_grad_to_one); }
     void zero_grad() { ::zero_grad(ctx_); }
 
     template <typename U> Matrix operator[](Matrix<U> &idx) {

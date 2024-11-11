@@ -222,7 +222,7 @@ template <typename T> void test_divide() {
     rhs->grad = 1;
     out->grad = 1;
     divide(out, lhs, rhs);
-    backward(out);
+    backward(out, false);
 
     auto lhs_mul = make_context_ptr<float>(shape);
     auto rhs_mul = make_context_ptr<float>(shape);
@@ -237,7 +237,7 @@ template <typename T> void test_divide() {
     out_mul->grad = 1;
 
     multiply(out_mul, lhs_mul, rhs_mul);
-    backward(out_mul);
+    backward(out_mul, false);
 
     is_close(lhs->grad, lhs_mul->grad);
     is_close(rhs->grad, rhs_mul->grad);
@@ -267,7 +267,7 @@ template <typename T> void test_matmul() {
     lhs->grad = 1;
     rhs->grad = 1;
 
-    backward(out);
+    backward(out, false);
 
     MatrixStorage<float> lhs_expected(shape0);
     MatrixStorage<float> rhs_expected(shape1);
@@ -342,7 +342,7 @@ template <typename T> void test_select_rows_and_cols() {
         }
     }
 
-    backward(out);
+    backward(out, false);
     is_close(rhs->grad, expected_grad);
 }
 

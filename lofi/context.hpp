@@ -443,8 +443,10 @@ template <typename T, typename Func> void topo(std::shared_ptr<Context<T>> &root
     }
 }
 
-template <typename T> void backward(std::shared_ptr<Context<T>> &root) {
-    root->grad = static_cast<T>(1);
+template <typename T> void backward(std::shared_ptr<Context<T>> &root, bool first_grad_to_one = true) {
+    if (first_grad_to_one) {
+        root->grad = static_cast<T>(1);
+    }
     topo(root, [](auto &ctx) { ctx->backward(); });
 }
 
