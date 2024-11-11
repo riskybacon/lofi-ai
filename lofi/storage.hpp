@@ -283,10 +283,8 @@ template <typename T> struct MatrixStorage {
  * @param variance The variance of the normal distribution. Default value is
  *                 1.0.
  */
-template <typename T>
-void fill_randn(MatrixStorage<T> &mat, std::mt19937 &gen, float mean = 0.0, float variance = 1.0) {
-    std::normal_distribution<float> dist(mean, std::sqrt(variance));
-
+template <typename T> void fill_randn(MatrixStorage<T> &mat, std::mt19937 &gen, T mean = 0.0, T variance = 1.0) {
+    std::normal_distribution<T> dist(mean, std::sqrt(variance));
     for (size_t i = 0; i < mat.shape[0]; ++i) {
         for (size_t j = 0; j < mat.shape[1]; ++j) {
             mat[{i, j}] = dist(gen);
@@ -294,9 +292,19 @@ void fill_randn(MatrixStorage<T> &mat, std::mt19937 &gen, float mean = 0.0, floa
     }
 }
 
-template <typename T> void fill_randn(MatrixStorage<T> &mat, float mean = 0.0, float variance = 1.0) {
-    auto gen = generator();
+template <typename T> void fill_randn(MatrixStorage<T> &mat, T mean = 0.0, T variance = 1.0) {    auto gen = generator();
     return fill_randn(mat, gen, mean, variance);
+}
+
+template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+void fill_randint(MatrixStorage<T> &mat, T low, T high, std::mt19937 &gen) {
+    std::uniform_int_distribution<T> dist(low, high - 1);
+
+    for (size_t i = 0; i < mat.shape[0]; ++i) {
+        for (size_t j = 0; j < mat.shape[1]; ++j) {
+            mat[{i, j}] = dist(gen);
+        }
+    }
 }
 
 template <typename T> void fill_value(MatrixStorage<T> &mat, const T &v) {

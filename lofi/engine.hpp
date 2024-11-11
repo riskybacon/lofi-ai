@@ -126,6 +126,13 @@ template <typename T> struct Matrix {
         return out;
     }
 
+    template <typename U, typename std::enable_if<std::is_integral<U>::value, int>::type = 0>
+    static Matrix<U> randint(U low, U high, const shape_type &shape, std::mt19937 &gen) {
+        Matrix<U> out(shape);
+        fill_randint(out.ctx_->data, low, high, gen);
+        return out;
+    }
+
     Matrix operator+(Matrix &rhs) {
         Matrix out(shape());
         add(out.ctx_, ctx_, rhs.ctx_);
