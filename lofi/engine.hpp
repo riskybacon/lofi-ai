@@ -9,6 +9,7 @@
 
 #include <lofi/context.hpp>
 #include <lofi/generator.hpp>
+#include <lofi/util.hpp>
 
 auto range(size_t num) {
     std::vector<size_t> out(num);
@@ -100,6 +101,24 @@ template <typename T> struct Matrix {
             ctx_->data[{i, 0}] = rows[{i, 0}];
             ctx_->data[{i, 1}] = cols[{i, 0}];
         }
+    }
+
+    static Matrix from_file(const std::string &filename, const shape_type &shape, const std::string &label = "") {
+        const auto data = read_numpy_array<value_type>(filename);
+        if (data.size() != shape[0] * shape[1]) {
+            std::stringstream ss;
+            ss << "data size " << data.size() << " does not match shape " << shape;
+            throw std::invalid_argument(ss.str());
+        }
+
+        Matrix out(shape, label);
+        size_t i = 0;
+        for (size_t r = 0; r < shape[0]; r++) {
+            for (size_t c = 0; c < shape[1]; c++) {
+                out.ctx_->data[{r, c}] = data[i++];
+            }
+        }
+        return out;
     }
 
     /**
