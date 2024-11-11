@@ -209,14 +209,10 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
     out->op = "tanh";
     auto weak = make_weak(out, lhs);
     out->backward = [weak]() {
-        // lhs->grad += (1 - out->data * out->data) * out->grad;
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> out2(out->data.shape);
-        MatrixStorage<T> ones({out2.shape, static_cast<T>(1)});
-        multiply(out2, out->data, out->data);
-        subtract(out2, static_cast<T>(1), out2);
-        multiply(out2, out2, out->grad);
-        add(lhs->grad, lhs->grad, out2);
+        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
+            lhs->grad.data[i] += (1 - out->data.data[i] * out->data.data[i]) * out->grad.data[i];
+        }
     };
 }
 
@@ -252,9 +248,11 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
         // lhs->grad += (1 / lhs->data) * out->grad;
         // or lhs->grad += (out->grad / lhs->data)
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> out2(out->data.shape);
-        divide(out2, out->grad, lhs->data);
-        add(lhs->grad, lhs->grad, out2);
+        for (size_t r = 0; r < out->shape()[0]; r++) {
+            for (size_t c = 0; c < out->shape()[1]; c++) {
+                lhs->grad[{r,c}] += out->grad[{r, c}] * std::pow(lhs->data[{r, c}], static_cast<T>(-1));
+            }
+        }
     };
 }
 

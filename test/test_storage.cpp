@@ -289,7 +289,7 @@ template <typename T> void test_tanh() {
         }
     }
 
-    log(dst, src);
+    tanh(dst, src);
     is_close(dst, expected);
 }
 
