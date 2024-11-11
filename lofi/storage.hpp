@@ -5,6 +5,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <iomanip>
 #include <ostream>
 #include <random>
 #include <sstream>
@@ -955,8 +956,8 @@ template <typename T> std::ostream &operator<<(std::ostream &out, const MatrixSt
 }
 
 template <typename T> bool is_close(const T &a, const T &b) {
-    const float epsilon = 1e-6;
-    return a >= (b - epsilon) and b <= (b + epsilon);
+    const T epsilon = 1e-6;
+    return std::abs(a - b) <= epsilon;
 }
 
 template <typename T> std::tuple<bool, std::string> is_close(const MatrixStorage<T> &a, const MatrixStorage<T> &b) {
@@ -974,6 +975,7 @@ template <typename T> std::tuple<bool, std::string> is_close(const MatrixStorage
                 std::stringstream coord;
                 coord << "{" << r << "," << c << "}";
                 std::stringstream ss;
+                ss << std::fixed << std::setprecision(16);
                 ss << "a[" << coord.str() << "](" << a_val << ") != b[" << coord.str() << "](" << b_val << ")";
                 return {false, ss.str()};
             }
