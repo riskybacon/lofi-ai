@@ -288,9 +288,9 @@ void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Cont
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "select";
-    auto weak = make_weak(out, lhs, idx);
-    out->backward = [weak]() {
-        auto [out, lhs, idx] = lock_weak(weak);
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, idx]() {
+        auto [out, lhs] = lock_weak(weak);
         const size_t rows = idx->shape()[0];
         const MatrixStorage<U> &idx_d = idx->data;
 
