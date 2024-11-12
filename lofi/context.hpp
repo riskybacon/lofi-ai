@@ -13,6 +13,8 @@
 
 #include <lofi/storage.hpp>
 
+static size_t ref_count = 0;
+
 /**
  * @brief A node in a graph
  *
@@ -36,9 +38,14 @@ template <typename T> struct Context {
     // Used for backward pass for max()
     std::vector<size_t> indices;
 
-    Context(const shape_type &shape) : data(shape), grad(shape) {}
-    Context(const shape_type &shape, const std::string &label) : data(shape), grad(shape), label(label) {}
+    Context() = delete;
+    Context(const Context &) = delete;
+    Context &operator=(const Context &) = delete;
+
+    Context(const shape_type &shape) : data(shape), grad(shape) { ref_count++; }
+    Context(const shape_type &shape, const std::string &label) : data(shape), grad(shape), label(label) { ref_count++; }
     const shape_type &shape() const { return data.shape; }
+    ~Context() { ref_count--; }
 };
 
 /**
@@ -311,11 +318,8 @@ void select_embeddings(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context
     out->op = "select";
     auto weak = make_weak(out, emb);
     out->backward = [weak, idx]() {
-        // Note: idx is captured by value, which increments the refcount
         auto [out, emb] = lock_weak(weak);
         select_embeddings_bwd(emb->grad, out->grad, idx->data);
-        // Force a decrement of idx at the end of this lambda
-        // idx.reset();
     };
 }
 
@@ -329,9 +333,9 @@ void broadcast_rows(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>
     out->prev = {src};
     src->degrees++;
     out->op = "broadcast";
-    auto weak = make_weak(out, src, idx);
-    out->backward = [weak]() {
-        auto [out, src, idx] = lock_weak(weak);
+    auto weak = make_weak(out, src);
+    out->backward = [weak, idx]() {
+        auto [out, src] = lock_weak(weak);
         broadcast_rows(src->grad, out->grad, idx->data, accumulate_op<T>);
     };
 }

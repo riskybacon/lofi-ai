@@ -149,7 +149,7 @@ template <typename T> struct NegativeLogLikelihood {
 };
 
 
-int main(void) {
+void run(void) {
     std::string filename = "names.txt";
     auto [words, stoi, itos, chars] = read_file(filename);
 
@@ -253,6 +253,11 @@ int main(void) {
         }
         std::cout << std::endl;
     }
+}
 
+int main() {
+    run();
+
+    std::cout << "ref_count=" << ref_count << std::endl;
     return 0;
 }
