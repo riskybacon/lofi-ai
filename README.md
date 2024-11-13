@@ -7,14 +7,16 @@ purposes. Inspired by Andrej Karpathy's
 [micrograd](https://github.com/karpathy/micrograd), it builds upon my earlier
 project, [micrograd_cpp](https://github.com/riskybacon/micrograd_cpp).
 
-lofi-ai's only requirement is a compiler with C++20 support. No separate
-libraries are needed.
-
 The project provides a simplified implementation of common ML components,
 including automatic differentiation.
 
 I'm developing this library as a hands-on way to deepen my understanding of
 machine learning frameworks. I'm specifically interested in CUDA support.
+
+### 📋 Requirements / Dependencies
+
+* C++20 capable compiler
+* Openblas
 
 ### 🚀 Features
 
@@ -29,7 +31,7 @@ computational graph being traversed in a single call.
 
 *Visualization*: Computational graph can be visualized using graphviz
 
-*Simple*: No external libraries, code is easy to read.
+*Simple*: Few dependencies, code is easy to read.
 
 ### 🛠️ Build and run
 
@@ -88,7 +90,7 @@ for (size_t k = 0; k < num_steps; k++) {
 ### 📝 TODO
 
 - [ ] Add features
-  - [ ] max()
+  - [x] max()
   - [ ] Transformer blocks
   - [ ] Forward pass graph capture / delayed execution
 - [ ] Increase test coverage
@@ -96,7 +98,7 @@ for (size_t k = 0; k < num_steps; k++) {
 - [ ] Break out MatrixStorage into two classes
 - [ ] Add Perfetto support
 - [ ] Optimize for CPU
-  - [ ] Faster matmul
+  - [x] Faster matmul
   - [ ] Fuse kernels in backward pass
 - [ ] Add CUDA support
   - [ ] CUDA-based matmul replacement

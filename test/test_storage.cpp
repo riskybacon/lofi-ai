@@ -150,18 +150,16 @@ template <typename T> void test_matmul() {
     const shape_type shape = {19, 19};
     MatrixStorage<float> mat0(shape);
     MatrixStorage<float> mat1(shape);
-
-    fill_randn(mat0);
-
-    for (size_t r = 0; r < mat1.shape[0]; r++) {
-        for (size_t c = 0; c < mat1.shape[1]; c++) {
-            mat1[{r, c}] = r == c ? static_cast<T>(1) : static_cast<T>(0);
-        }
-    }
-
     MatrixStorage<float> mat2(shape);
+    MatrixStorage<float> expected(shape);
+
+    fill_mat(mat0);
+    fill_mat(mat1, static_cast<T>(3.13159));
+
+    matmul_ref(expected, mat0, mat1);
     matmul(mat2, mat0, mat1);
-    is_close(mat2, mat0);
+
+    is_close(mat2, expected);
 
     throws_exception(std::invalid_argument, matmul(mat0, mat0, mat1));
     throws_exception(std::invalid_argument, matmul(mat1, mat0, mat1));

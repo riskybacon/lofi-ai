@@ -186,23 +186,9 @@ void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     auto weak = make_weak(out, lhs, rhs);
     out->backward = [weak]() {
         auto [out, lhs, rhs] = lock_weak(weak);
-        const auto &l_shape = lhs->data.shape;
-        const auto &r_shape = rhs->data.shape;
-
-        MatrixStorage<T> rhs_t({r_shape[1], r_shape[0]});
-        MatrixStorage<T> lhs_t({l_shape[1], l_shape[0]});
-        MatrixStorage<T> lhs_grad(l_shape);
-        MatrixStorage<T> rhs_grad(r_shape);
-
-        // lhs->grad += out->grad @ rhs_t->data
-        // rhs->grad += lhs_t->data @ out->grad
-
-        transpose(rhs_t, rhs->data);
-        transpose(lhs_t, lhs->data);
-        matmul(lhs_grad, out->grad, rhs_t);
-        matmul(rhs_grad, lhs_t, out->grad);
-        add(lhs->grad, lhs->grad, lhs_grad);
-        add(rhs->grad, rhs->grad, rhs_grad);
+        const T one(1);
+        gemm(CblasNoTrans, CblasTrans, lhs->grad, out->grad, rhs->data, one, one);
+        gemm(CblasTrans, CblasNoTrans, rhs->grad, lhs->data, out->grad, one, one);
     };
 }
 

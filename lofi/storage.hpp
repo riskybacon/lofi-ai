@@ -4,6 +4,7 @@
 // * Storage management, which handles memory management and element access.
 #pragma once
 #include <array>
+#include <cblas.h>
 #include <cstdint>
 #include <iomanip>
 #include <ostream>
@@ -681,7 +682,7 @@ template <typename T> MatrixStorage<T> operator/(const T &rhs, const MatrixStora
  *
  * @throws std::invalid_argument if the number of columns in `lhs` does not match the number of rows in `rhs`.
  */
-template <typename T> void matmul(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, const MatrixStorage<T> &rhs) {
+template <typename T> void matmul_ref(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, const MatrixStorage<T> &rhs) {
     const size_t lhs_rows = lhs.shape[0];
     const size_t lhs_cols = lhs.shape[1];
     const size_t rhs_rows = rhs.shape[0];
@@ -714,6 +715,59 @@ template <typename T> void matmul(MatrixStorage<T> &out, const MatrixStorage<T> 
             }
         }
     }
+}
+
+template <typename T>
+void gemm(const enum CBLAS_TRANSPOSE trans_a, const enum CBLAS_TRANSPOSE trans_b, MatrixStorage<T> &mat_c,
+          const MatrixStorage<T> &mat_a, const MatrixStorage<T> &mat_b, T alpha, T beta) {
+    size_t m = trans_a == CblasNoTrans ? mat_a.shape[0] : mat_a.shape[1];
+    size_t n = trans_b == CblasNoTrans ? mat_b.shape[1] : mat_b.shape[0];
+    size_t k = trans_a == CblasNoTrans ? mat_a.shape[1] : mat_a.shape[0];
+
+    size_t lda = mat_a.shape[1];
+    size_t ldb = mat_b.shape[1];
+    size_t ldc = mat_c.shape[1];
+
+    const T *a = mat_a.data.data();
+    const T *b = mat_b.data.data();
+    T *c = mat_c.data.data();
+
+    if constexpr (std::is_same<T, float>::value) {
+        cblas_sgemm(CblasRowMajor, trans_a, trans_b, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+    } else if constexpr (std::is_same<T, double>::value) {
+        cblas_dgemm(CblasRowMajor, trans_a, trans_b, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+    } else {
+        throw std::invalid_argument("Unsupported data type for CBLAS matmul.");
+    }
+}
+
+template <typename T> void matmul(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, const MatrixStorage<T> &rhs) {
+    const size_t lhs_rows = lhs.shape[0];
+    const size_t lhs_cols = lhs.shape[1];
+    const size_t rhs_rows = rhs.shape[0];
+    const size_t rhs_cols = rhs.shape[1];
+
+    if (out.id() == lhs.id()) {
+        throw std::invalid_argument("out and lhs cannot point to the same data");
+    }
+
+    if (out.id() == rhs.id()) {
+        throw std::invalid_argument("out and rhs cannot point to the same data");
+    }
+
+    if (lhs_cols != rhs_rows) {
+        throw std::invalid_argument("Matrix dimensions do not match for multiplication.");
+    }
+
+    if (lhs_rows != out.shape[0]) {
+        throw std::invalid_argument("Matrix dimensions do not match for multiplication.");
+    }
+
+    if (rhs_cols != out.shape[1]) {
+        throw std::invalid_argument("Matrix dimensions do not match for multiplication.");
+    }
+
+    gemm(CblasNoTrans, CblasNoTrans, out, lhs, rhs, static_cast<T>(1), static_cast<T>(0));
 }
 
 template <typename T> void log(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
