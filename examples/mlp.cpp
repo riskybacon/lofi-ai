@@ -1,3 +1,4 @@
+#include <chrono>
 #include <climits>
 #include <fstream>
 #include <iostream>
@@ -99,17 +100,23 @@ template <typename T> struct Model {
     Matrix<T> W2;
     Matrix<T> b2;
     std::vector<Matrix<T>> parameters;
-    size_t block_size = 3;
-    size_t embedding_dim = 2;
 
-    Model(std::mt19937 g) {
-        C = Matrix<T>::randn({27, embedding_dim}, g);
-        W1 = Matrix<T>::randn({block_size * C.shape()[1], 100}, g);
-        b1 = Matrix<T>::randn({1, 100}, g);
-        W2 = Matrix<T>::randn({100, 27}, g);
-        b2 = Matrix<T>::randn({1, 27}, g);
+    Model(size_t context_size, size_t embedding_dim, size_t hidden, size_t num_tokens, std::mt19937 g) {
+        C = Matrix<T>::randn({num_tokens, embedding_dim}, g);
+        W1 = Matrix<T>::randn({context_size * C.shape()[1], hidden}, g);
+        b1 = Matrix<T>::randn({1, hidden}, g);
+        W2 = Matrix<T>::randn({hidden, num_tokens}, g);
+        b2 = Matrix<T>::randn({1, num_tokens}, g);
 
         parameters = {C, W1, b1, W2, b2};
+    }
+
+    size_t num_parameters() const {
+        size_t n = 0;
+        for (const auto &p : parameters) {
+            n += p.shape()[0] * p.shape()[1];
+        }
+        return n;
     }
 
     auto forward(Matrix<size_t> &x) {
@@ -148,14 +155,17 @@ template <typename T> struct NegativeLogLikelihood {
     }
 };
 
-
 void run(void) {
+    const size_t context_size = 5;
+    const size_t embedding_dim = 10;
+    const size_t hidden = 200;
+
     std::string filename = "names.txt";
     auto [words, stoi, itos, chars] = read_file(filename);
 
-    const auto vocab_size = itos.size();
-    std::cout << "vocab_size=" << vocab_size << std::endl;
-    std::cout << "words=" << words.size() << std::endl;
+    const auto num_tokens = itos.size();
+    std::cout << "num_tokens: " << num_tokens << std::endl;
+    std::cout << "words: " << words.size() << std::endl;
 
     auto g = generator();
     g.seed(INT_MAX);
@@ -169,47 +179,60 @@ void run(void) {
     auto w3 = words.end();
 
     // Split data
-    const int block_size = 3;
-    auto [Xtr, Ytr] = build_dataset(w0, w1, block_size, stoi);
-    auto [Xdev, Ydev] = build_dataset(w1, w2, block_size, stoi);
-    auto [Xte, Yte] = build_dataset(w2, w3, block_size, stoi);
+    auto [Xtr, Ytr] = build_dataset(w0, w1, context_size, stoi);
+    auto [Xdev, Ydev] = build_dataset(w1, w2, context_size, stoi);
+    auto [Xte, Yte] = build_dataset(w2, w3, context_size, stoi);
 
     std::cout << "Training set size: " << Xtr.shape()[0] << std::endl;
     std::cout << "Dev set size: " << Xdev.shape()[0] << std::endl;
     std::cout << "Test set size: " << Xte.shape()[0] << std::endl;
 
-    Model<float> model(g);
+    Model<float> model(context_size, embedding_dim, hidden, num_tokens, g);
     SoftMax<float> softmax;
     NegativeLogLikelihood<float> loss_fn;
 
-    size_t num_steps = 1000000;
+    std::cout << "num_parameters: " << model.num_parameters() << std::endl;
+
+    size_t num_steps = 600000;
+    size_t decay_step = 150000;
+    size_t decay_step1 = 300000;
     size_t eval_steps = 10000;
     float lr = 0.1;
 
     const size_t batch_size = 32;
     const size_t zero = 0;
 
+    std::chrono::duration<double> duration(0);
+
     // Training loop
     for (size_t k = 0; k < num_steps; k++) {
-        if (k == num_steps / 2) {
-            lr = 0.01;
+        const auto start = std::chrono::high_resolution_clock::now();
+
+        if (k == decay_step || k == decay_step1) {
+            lr *= 0.1;
         }
+
         Matrix<size_t> x_batch;
         Matrix<size_t> y_batch;
         std::string prefix;
+
+        bool training = true;
 
         if (k == num_steps - 1) {
             prefix = "***TEST*** ";
             x_batch = Xte;
             y_batch = Yte;
+            training = false;
         } else if (k > 0 && k % eval_steps == 0) {
             prefix = "***EVAL*** ";
             x_batch = Xdev;
             y_batch = Ydev;
+            training = false;
         } else {
             auto ix = Matrix<size_t>::randint(zero, Xtr.shape()[0], {batch_size, 1}, g);
             x_batch = Xtr[ix];
             y_batch = Ytr[ix];
+            training = true;
         }
 
         // Forward
@@ -218,16 +241,22 @@ void run(void) {
         auto loss = loss_fn(probs, y_batch);
 
         if (k % 500 == 0 || k == num_steps - 1) {
-            std::cout << prefix << "step: " << k + 1 << "/" << num_steps << ": lr=" << lr << ", loss=" << loss.data();
+            std::cout << prefix << "step: " << k + 1 << "/" << num_steps << ": lr=" << lr << ", loss=" << loss.data()
+                      << ", duration=" << duration.count() << " s" << std::endl;
         }
 
-        loss.zero_grad();
-        loss.backward();
-        model.weight_update(lr);
+        if (training) {
+            loss.zero_grad();
+            loss.backward();
+            model.weight_update(lr);
+        }
+
+        const auto end = std::chrono::high_resolution_clock::now();
+        duration = end - start;
     }
 
     // Sample from model
-    Matrix<size_t> context({1, block_size});
+    Matrix<size_t> context({1, context_size});
     for (size_t i = 0; i < 20; i++) {
         context.data() = 0;
         std::vector<char> out;
@@ -242,10 +271,10 @@ void run(void) {
                 break;
             }
 
-            for (size_t i = 0; i < block_size - 1; i++) {
+            for (size_t i = 0; i < context_size - 1; i++) {
                 context.data()[{0, i}] = context.data()[{0, i + 1}];
             }
-            context.data()[{0, block_size - 1}] = ix;
+            context.data()[{0, context_size - 1}] = ix;
         }
 
         for (auto ch : out) {
