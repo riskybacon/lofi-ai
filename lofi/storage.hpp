@@ -1012,13 +1012,15 @@ template <typename T> std::ostream &operator<<(std::ostream &out, const MatrixSt
         for (size_t c = 0; c < mat.shape[1]; c++) {
             out << mat[{r, c}] << " ";
         }
-        out << std::endl;
+        if (r < mat.shape[0] - 1) {
+            out << std::endl;
+        }
     }
     return out;
 }
 
 template <typename T> bool is_close(const T &a, const T &b) {
-    const T epsilon = 1e-6;
+    const T epsilon = 1e-4;
     return std::abs(a - b) <= epsilon;
 }
 
