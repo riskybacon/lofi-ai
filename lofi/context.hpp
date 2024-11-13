@@ -221,9 +221,9 @@ template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->backward = [weak]() {
         // lhs->grad += out->data * out->grad;
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> tmp(out->data.shape);
-        multiply(lhs->grad, out->data, out->grad);
-        add(lhs->grad, lhs->grad, tmp);
+        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
+            lhs->grad.data[i] += out->data.data[i] * out->grad.data[i];
+        }
     };
 }
 
@@ -241,10 +241,8 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
         // lhs->grad += (1 / lhs->data) * out->grad;
         // or lhs->grad += (out->grad / lhs->data)
         auto [out, lhs] = lock_weak(weak);
-        for (size_t r = 0; r < out->shape()[0]; r++) {
-            for (size_t c = 0; c < out->shape()[1]; c++) {
-                lhs->grad[{r,c}] += out->grad[{r, c}] * std::pow(lhs->data[{r, c}], static_cast<T>(-1));
-            }
+        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
+            lhs->grad.data[i] += out->grad.data[i] * std::pow(lhs->data.data[i], static_cast<T>(-1));
         }
     };
 }
@@ -263,11 +261,9 @@ template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->backward = [weak, rhs]() {
         // lhs->grad += rhs * std::pow(lhs->data, rhs - 1) * out->grad;
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<float> tmp({lhs->shape()});
-        pow(tmp, lhs->data, rhs - static_cast<T>(1));
-        multiply(tmp, rhs, tmp);
-        multiply(tmp, tmp, out->grad);
-        add(lhs->grad, lhs->grad, tmp);
+        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
+            lhs->grad.data[i] += rhs * std::pow(lhs->data.data[i], rhs - 1) * out->grad.data[i];
+        }
     };
 }
 
