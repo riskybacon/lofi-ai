@@ -1,19 +1,20 @@
 CPP = g++
 EXTRA_CXXFLAGS =
 CXXFLAGS = -Wall -g --std=c++20 -I.. $(EXTRA_CXXFLAGS)
+LDFLAGS = -lopenblas
 
 TARGETS = test_storage test_context test_engine 
 
 SRCS = test_storage.cpp test_context.cpp test_engine.cpp
-OBJS = $(SRCS:.c=.o)
+OBJS = $(SRCS:.cpp=.o)
 
 all: $(TARGETS)
 
-$(TARGET): $(OBJS)
-	$(CPP) $(CXXFLAGS) -o $@ $^
+$(TARGETS): %: %.o
+	$(CPP) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cpp
 	$(CPP) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(TARGETS) *.dSYM
+	rm -rf $(TARGETS) *.o *.dSYM *.svg *.png *.dot
