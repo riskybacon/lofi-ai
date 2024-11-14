@@ -30,6 +30,7 @@
  */
 std::tuple<std::vector<std::string>, std::unordered_map<char, int>, std::unordered_map<int, char>, std::vector<char>>
 read_file(const std::string &filename) {
+    std::cout << "Reading names from `" << filename << "`" << std::endl;
     std::string word;
     std::ifstream file(filename);
     std::vector<std::string> words;
@@ -160,7 +161,7 @@ void run(void) {
     const size_t embedding_dim = 10;
     const size_t hidden = 200;
 
-    std::string filename = "names.txt";
+    std::string filename = std::string(PROJECT_SOURCE_DIR) + "/examples/names.txt";
     auto [words, stoi, itos, chars] = read_file(filename);
 
     const auto num_tokens = itos.size();

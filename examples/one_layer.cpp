@@ -88,7 +88,7 @@ std::tuple<std::vector<size_t>, std::vector<size_t>> build_dataset(const std::ve
 }
 
 int main(void) {
-    std::string filename = "names.txt";
+    std::string filename = std::string(PROJECT_SOURCE_DIR) + "/examples/names.txt";
     auto [words, stoi, itos, chars] = read_file(filename);
     auto [xs, ys] = build_dataset(words, stoi);
     const size_t num = xs.size();
