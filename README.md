@@ -17,6 +17,7 @@ machine learning frameworks. I'm specifically interested in CUDA support.
 
 * C++20 capable compiler
 * Openblas
+* CMake
 
 ### 🚀 Features
 
