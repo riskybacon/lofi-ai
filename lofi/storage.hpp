@@ -946,6 +946,10 @@ template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indic
     }
 }
 
+template <typename T> void sqrt(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
+    eltwise_unary_func(out, in, [](const T &x) { return std::sqrt(x); });
+}
+
 template <typename T, typename U>
 void select_rows_and_cols(MatrixStorage<T> &lhs, MatrixStorage<T> &rhs, const MatrixStorage<U> &idx) {
     if (idx.shape[1] != 2) {

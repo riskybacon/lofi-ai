@@ -147,6 +147,25 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
 }
 
 /**
+ * @brief element-wise multiplication of two matrices
+ */
+template <typename T>
+void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T rhs) {
+    multiply(out->data, lhs->data, rhs);
+    out->prev = {lhs};
+    lhs->degrees++;
+    out->op = "*";
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, rhs]() {
+        // (m x n) = (m x n) * (m x n)
+        auto [out, lhs] = lock_weak(weak);
+        MatrixStorage<T> lhs_grad(lhs->grad.shape);
+        multiply(lhs_grad, rhs, out->grad);
+        add(lhs->grad, lhs->grad, lhs_grad);
+    };
+}
+
+/**
  * @brief element-wise division of two matrices
  */
 template <typename T>
