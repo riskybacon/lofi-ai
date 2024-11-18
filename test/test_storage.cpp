@@ -648,6 +648,44 @@ void test_select_embeddings_bwd() {
     is_close(demb, expected);
 }
 
+template <typename T> void test_stddev(size_t axis) {
+    const shape_type in_shape = {3, 4};
+    shape_type out_shape = in_shape;
+    out_shape[axis] = 1;
+    const size_t off_axis = axis == 0 ? 1 : 0;
+
+    MatrixStorage<T> in(in_shape);
+    MatrixStorage<T> out(out_shape);
+    MatrixStorage<T> expected(out_shape);
+
+    const T divisor = static_cast<T>(1) / in_shape[axis];
+
+    auto out_idx = axis == 0 ? bcast0 : bcast1;
+    auto in_idx = axis == 0 ? swap_idx : identity;
+
+    for (size_t i = 0; i < in_shape[off_axis]; i++) {
+        T mean = 0;
+        for (size_t j = 0; j < in_shape[axis]; j++) {
+            T val = static_cast<T>(i) + static_cast<T>(j);
+            in[in_idx({i, j})] = val;
+            mean += val;
+        }
+
+        mean *= divisor;
+
+        T variance = 0;
+        for (size_t j = 0; j < in_shape[axis]; j++) {
+            const T val = in[in_idx({i, j})] - mean;
+            variance += val * val;
+        }
+
+        expected[out_idx({i, 0})] = variance * divisor;
+    }
+
+    stddev(out, in, axis);
+    is_close(out, expected);
+}
+
 int main(int argc, char **argv) {
     test_constructor<float>();
     test_move_assign<float>();
@@ -686,6 +724,9 @@ int main(int argc, char **argv) {
 
     test_select_embeddings<float>();
     test_select_embeddings_bwd<float>();
+
+    test_stddev<float>(0);
+    test_stddev<float>(1);
 
     std::cout << argv[0] << ": " << num_passed << " passed / " << num_tests << " total" << std::endl;
     return 0;

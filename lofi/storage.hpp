@@ -63,7 +63,7 @@ template <size_t DIM> std::ostream &operator<<(std::ostream &out, const std::arr
 
 void throw_unexpected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
     std::stringstream ss;
-    ss << "[" << file << ":" << line << "] : Expected shape=" << expected << ", got " << actual;
+    ss << "[" << file << ":" << line << "]: Expected shape=" << expected << ", got " << actual;
 }
 
 void _assert_expected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
@@ -72,7 +72,31 @@ void _assert_expected_shape(const shape_type &actual, const shape_type &expected
     }
 }
 
+void _assert_axis_lte(size_t axis, size_t max_axis, const char *file, const int line) {
+    if (axis > max_axis) {
+        std::stringstream ss;
+        ss << "[" << file << ":" << line << "]: axis " << axis << " is greater than max axis " << max_axis;
+        throw std::invalid_argument(ss.str());
+    }
+}
+
+void _assert_shape_not_zero(const shape_type &shape, const char *file, const int line) {
+    bool not_zero = false;
+    for (size_t i = 0; !not_zero && i < shape.size(); i++) {
+        if (shape[i] > 0) {
+            not_zero = true;
+        }
+    }
+    if (!not_zero) {
+        std::stringstream ss;
+        ss << "[" << file << ":" << line << "]: shape " << shape << " must not have zero dimensions";
+        throw std::invalid_argument(ss.str());
+    }
+}
+
 #define assert_expected_shape(a, b) _assert_expected_shape(a, b, __FILE__, __LINE__)
+#define assert_axis_lte(a, b) _assert_axis_lte(a, b, __FILE__, __LINE__)
+#define assert_shape_not_zero(a) _assert_shape_not_zero(a, __FILE__, __LINE__)
 
 template <typename T> struct MatrixStorage {
     using value_type = T;
@@ -250,6 +274,14 @@ template <typename T> struct MatrixStorage {
         out_shape[axis] = 1;
         MatrixStorage out(out_shape);
         mean(out, *this, axis);
+        return out;
+    }
+
+    MatrixStorage stddev(size_t axis) const {
+        shape_type out_shape = shape;
+        out_shape[axis] = 1;
+        MatrixStorage out(out_shape);
+        stddev(out, *this, axis);
         return out;
     }
 
@@ -812,10 +844,40 @@ template <typename T> void sum(MatrixStorage<T> &out, const MatrixStorage<T> &in
     }
 }
 
-template <typename T> void mean(MatrixStorage<T> &out, MatrixStorage<T> &in, const size_t axis) {
+template <typename T> void mean(MatrixStorage<T> &out, const MatrixStorage<T> &in, const size_t axis) {
     const T divisor = static_cast<T>(1) / static_cast<T>(in.shape[axis]);
     sum(out, in, axis);
     multiply(out, out, divisor);
+}
+
+template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> &in, const size_t axis) {
+    const size_t off_axis = axis == 0 ? 1 : 0;
+    shape_type expected_shape = in.shape;
+    expected_shape[axis] = 1;
+
+    assert_shape_not_zero(in.shape);
+    assert_axis_lte(axis, 1);
+    assert_expected_shape(out.shape, expected_shape);
+
+    const T divisor = static_cast<T>(1) / static_cast<T>(in.shape[axis]);
+
+    auto out_idx = axis == 0 ? bcast0 : bcast1;
+    auto in_idx = axis == 0 ? swap_idx : identity;
+
+    for (size_t i = 0; i < in.shape[off_axis]; i++) {
+        T mean = 0;
+        for (size_t j = 0; j < in.shape[axis]; j++) {
+            mean += in[in_idx({i, j})];
+        }
+        mean *= divisor;
+
+        T variance = 0;
+        for (size_t j = 0; j < in.shape[axis]; j++) {
+            const T val = in[in_idx({i, j})] - mean;
+            variance += val * val;
+        }
+        out[out_idx({i, 0})] = variance * divisor;
+    }
 }
 
 template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indices, const MatrixStorage<T> &in, const size_t axis) {
