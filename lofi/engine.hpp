@@ -341,6 +341,14 @@ template <typename T> struct Matrix {
         return out;
     }
 
+    Matrix stddev(size_t axis) {
+        shape_type out_shape = shape();
+        out_shape[axis] = 1;
+        Matrix out(out_shape);
+        ::stddev(out.ctx_, ctx_, axis);
+        return out;
+    }
+
     value_type &operator[](const shape_type &idx) { return data()[idx]; }
 
     const value_type &operator[](const shape_type &idx) const { return data()[idx]; }

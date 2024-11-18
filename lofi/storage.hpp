@@ -865,18 +865,48 @@ template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> 
     auto in_idx = axis == 0 ? swap_idx : identity;
 
     for (size_t i = 0; i < in.shape[off_axis]; i++) {
-        T mean = 0;
+        T mu = 0;
         for (size_t j = 0; j < in.shape[axis]; j++) {
-            mean += in[in_idx({i, j})];
+            mu += in[in_idx({i, j})];
         }
-        mean *= divisor;
+        mu *= divisor;
 
         T variance = 0;
         for (size_t j = 0; j < in.shape[axis]; j++) {
-            const T val = in[in_idx({i, j})] - mean;
+            const T val = in[in_idx({i, j})] - mu;
             variance += val * val;
         }
         out[out_idx({i, 0})] = variance * divisor;
+    }
+}
+
+template <typename T>
+void stddev_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &lhs_data, const MatrixStorage<T> &out_grad,
+                const MatrixStorage<T> &out_data, size_t axis) {
+    MatrixStorage<T> mu(out_data.shape);
+    mean(mu, lhs_data, axis);
+
+    const size_t off_axis = axis == 0 ? 1 : 0;
+    const T two_over_n = static_cast<T>(2) / static_cast<T>(lhs_data.shape[axis]);
+
+    auto b_idx = axis == 0 ? bcast0 : bcast1;
+    auto idx = axis == 0 ? swap_idx : identity;
+
+    // \frac{\partial \sigma}{\partial x_i} = \frac{1}{2\sigma} \cdot \frac{\partial \text{var}(x)}{\partial x_i} ]
+    // where \frac{\partial \text{var}(x)}{\partial x_i} = \frac{2}{N} (x_i - \mu)
+
+    // dsigma / dx_i = (1 / 2 * sigma) * dvar(x) / dx_i
+    // dvar(x) / dx_i = (2/n) * (x[i] - mean)
+    for (size_t i = 0; i < lhs_grad.shape[off_axis]; i++) {
+        const T half_sigma = static_cast<T>(1) / (static_cast<T>(2) * sqrt(out_data[b_idx({i, 0})]));
+        const T mu_i = mu[b_idx({i, 0})];
+        const T g_i = out_grad[b_idx({i, 0})];
+        for (size_t j = 0; j < lhs_grad.shape[axis]; j++) {
+            const T xi = lhs_data[idx({i, j})];
+            const T dvar_dxi = two_over_n * (xi - mu_i);
+            const T dsigma_dxi = half_sigma * dvar_dxi;
+            lhs_grad[idx({i, j})] += dsigma_dxi * g_i;
+        }
     }
 }
 

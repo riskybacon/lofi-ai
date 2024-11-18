@@ -382,6 +382,18 @@ void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
     };
 }
 
+template <typename T> void stddev(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, size_t axis) {
+    stddev(out->data, lhs->data, axis);
+    out->prev = {lhs};
+    lhs->degrees++;
+    out->op = "std";
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak, axis]() {
+        auto [out, lhs] = lock_weak(weak);
+        stddev_bwd(lhs->grad, lhs->data, out->grad, out->data, axis);
+    };
+}
+
 template <typename T, typename Func> void bfs(std::shared_ptr<Context<T>> &root, Func func) {
     using ptr_t = std::shared_ptr<Context<T>>;
     std::unordered_set<ptr_t> visited;
