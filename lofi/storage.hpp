@@ -3,6 +3,7 @@
 //   the non-autograd style functions.
 // * Storage management, which handles memory management and element access.
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cblas.h>
 #include <cstdint>
@@ -10,12 +11,20 @@
 #include <iomanip>
 #include <ostream>
 #include <random>
+#include <ranges>
 #include <sstream>
 #include <vector>
 
 #include <lofi/generator.hpp>
 
 using shape_type = std::array<size_t, 2>;
+using std::begin;
+using std::end;
+using std::cbegin;
+using std::cend;
+using std::ranges::views::zip;
+using std::views::iota;
+using std::views::transform;
 
 template <typename T> void assign_op(T &lhs, const T &rhs) { lhs = rhs; }
 
@@ -104,6 +113,7 @@ template <typename T> struct MatrixStorage {
     using shape_type = std::array<size_t, 2>;
 
     shape_type shape = {0, 0};
+    shape_type strides = {0, 0};
     std::vector<T> data;
 
     MatrixStorage() {}
@@ -112,16 +122,21 @@ template <typename T> struct MatrixStorage {
     MatrixStorage(const MatrixStorage &) = delete;
     MatrixStorage &operator=(const MatrixStorage &rhs) = delete;
 
-    MatrixStorage(const shape_type &shape) : shape(shape), data(shape[0] * shape[1]) {}
-    MatrixStorage(const shape_type &shape, value_type val) : shape(shape), data(shape[0] * shape[1]) {
+    MatrixStorage(const shape_type &shape) : shape(shape), strides({shape[1], 1}), data(shape[0] * shape[1]) {}
+    MatrixStorage(const shape_type &shape, value_type val)
+        : shape(shape), strides({shape[1], 1}), data(shape[0] * shape[1]) {
         fill_value<value_type>(*this, val);
     }
 
-    MatrixStorage(MatrixStorage &&rhs) : shape(std::move(rhs.shape)), data(std::move(rhs.data)) { rhs.shape = {0, 0}; }
+    MatrixStorage(MatrixStorage &&rhs)
+        : shape(std::move(rhs.shape)), strides({shape[1], 1}), data(std::move(rhs.data)) {
+        rhs.shape = {0, 0};
+    }
 
     MatrixStorage &operator=(MatrixStorage &&rhs) {
         if (this != &rhs) {
             shape = std::move(rhs.shape);
+            strides = std::move(rhs.strides);
             data = std::move(rhs.data);
             for (size_t i = 0; i < shape.size(); i++) {
                 rhs.shape[i] = 0;
@@ -133,8 +148,40 @@ template <typename T> struct MatrixStorage {
     MatrixStorage clone() const {
         MatrixStorage out;
         out.shape = shape;
+        out.strides = strides;
         out.data = data;
         return out;
+    }
+
+    auto slice(size_t axis, size_t index) {
+        if (axis == 0) {
+            return data | std::views::drop(index * strides[1]) | std::views::stride(strides[0]) | std::views::take(shape[0]);
+        }
+        return data | std::views::drop(index * strides[0]) | std::views::stride(strides[1]) | std::views::take(shape[1]);
+    }
+
+    auto slice(size_t axis, size_t index) const {
+        if (axis == 0) {
+            return data | std::views::drop(index * strides[1]) | std::views::stride(strides[0]) | std::views::take(shape[0]);
+        }
+        return data | std::views::drop(index * strides[0]) | std::views::stride(strides[1]) | std::views::take(shape[1]);
+    }
+
+    auto slices(size_t outer_axis, size_t inner_axis) {
+        return iota(static_cast<size_t>(0), shape[outer_axis]) |
+               transform([inner_axis, this](size_t i) { return slice(inner_axis, i); });
+    }
+
+    const auto slices(size_t outer_axis, size_t inner_axis) const {
+        return iota(static_cast<size_t>(0), shape[outer_axis]) |
+               transform([inner_axis, this](size_t i) { return slice(inner_axis, i); });
+    }
+
+    /**
+     * @brief returns an iterator that ranges from 0 to shape[axis], increasing by 1
+     */
+    auto axis_iota(size_t axis) const {
+        return std::views::iota(static_cast<size_t>(0), shape[axis]);
     }
 
     MatrixStorage &operator=(const value_type val) {
@@ -286,6 +333,9 @@ template <typename T> struct MatrixStorage {
         return out;
     }
 
+    value_type &operator[](size_t idx) { return data[idx]; }
+    const value_type &operator[](size_t idx) const { return data[idx]; }
+
     const size_t offset(const shape_type &idx) const { return idx[0] * shape[1] + idx[1]; }
 
     value_type &operator[](const shape_type &idx) { return data[offset(idx)]; }
@@ -319,14 +369,15 @@ template <typename T> struct MatrixStorage {
  */
 template <typename T> void fill_randn(MatrixStorage<T> &mat, std::mt19937 &gen, T mean = 0.0, T variance = 1.0) {
     std::normal_distribution<T> dist(mean, std::sqrt(variance));
-    for (size_t i = 0; i < mat.shape[0]; ++i) {
-        for (size_t j = 0; j < mat.shape[1]; ++j) {
-            mat[{i, j}] = dist(gen);
+    for (auto row_slice : mat.slices(0, 0)) {
+        for (auto &elem : row_slice) {
+            elem = dist(gen);
         }
     }
 }
 
-template <typename T> void fill_randn(MatrixStorage<T> &mat, T mean = 0.0, T variance = 1.0) {    auto gen = generator();
+template <typename T> void fill_randn(MatrixStorage<T> &mat, T mean = 0.0, T variance = 1.0) {
+    auto gen = generator();
     return fill_randn(mat, gen, mean, variance);
 }
 
@@ -334,9 +385,9 @@ template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::
 void fill_randint(MatrixStorage<T> &mat, T low, T high, std::mt19937 &gen) {
     std::uniform_int_distribution<T> dist(low, high - 1);
 
-    for (size_t i = 0; i < mat.shape[0]; ++i) {
-        for (size_t j = 0; j < mat.shape[1]; ++j) {
-            mat[{i, j}] = dist(gen);
+    for (auto row_slice : mat.slices(0, 0)) {
+        for (auto &elem : row_slice) {
+            elem = dist(gen);
         }
     }
 }
@@ -360,12 +411,14 @@ template <typename T> void broadcast(MatrixStorage<T> &lhs, const MatrixStorage<
         throw_incompatible_lhs_rhs();
     }
 
-    auto idx_func = choose_bcast(rhs.shape);
+    const size_t axis = rhs.shape[0] == 1 ? 0 : 1;
+    const size_t outer_axis = axis == 0 ? 1 : 0;
+    auto rhs_slice = rhs.slice(outer_axis, 0);
+    auto lhs_slices = lhs.slices(axis, outer_axis);
 
-    for (size_t r = 0; r < lhs.shape[0]; r++) {
-        for (size_t c = 0; c < lhs.shape[1]; c++) {
-            lhs[{r, c}] = rhs[idx_func({r, c})];
-        }
+#pragma omp parallel for
+    for (auto lhs_slice : lhs_slices) {
+        std::copy(std::begin(rhs_slice), std::end(rhs_slice), std::begin(lhs_slice));
     }
 }
 
@@ -422,10 +475,12 @@ template <typename T> void transpose(MatrixStorage<T> &out, const MatrixStorage<
         throw std::invalid_argument(ss.str());
     }
 
-    for (size_t i = 0; i < in.shape[0]; i++) {
-        for (size_t j = 0; j < in.shape[1]; j++) {
-            out[{j, i}] = in[{i, j}];
-        }
+    auto out_col_slices = out.slices(1, 0);
+    auto in_row_slices = in.slices(0, 1);
+
+#pragma omp parallel for
+    for (auto [out_col_slice, in_row_slice] : zip(out_col_slices, in_row_slices)) {
+        std::copy(cbegin(in_row_slice), cend(in_row_slice), std::begin(out_col_slice));
     }
 }
 
@@ -437,10 +492,12 @@ void eltwise_unary_func(MatrixStorage<T> &out, const MatrixStorage<T> &in, Func 
         throw std::invalid_argument(ss.str());
     }
 
-    for (size_t r = 0; r < out.shape[0]; r++) {
-        for (size_t c = 0; c < out.shape[1]; c++) {
-            out[{r, c}] = func(in[{r, c}]);
-        }
+    auto out_row_slices = out.slices(0, 1);
+    auto in_row_slices = in.slices(0, 1);
+
+#pragma omp parallel for
+    for (auto [out_row_slice, in_row_slice] : zip(out_row_slices, in_row_slices)) {
+        std::transform(cbegin(in_row_slice), cend(in_row_slice), std::begin(out_row_slice), func);
     }
 }
 
@@ -476,7 +533,7 @@ void eltwise_unary_func(MatrixStorage<T> &out, const MatrixStorage<T> &in, Func 
 template <typename T, typename Func>
 void eltwise_binary_func(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, const MatrixStorage<T> &rhs, Func func) {
     const shape_type out_shape = max_shape(lhs.shape, rhs.shape);
-
+    assert_expected_shape(out.shape, out_shape);
     if (out.shape != out_shape) {
         std::stringstream ss;
         ss << "Expected out.shape=" << out_shape << ", got " << out.shape;
@@ -529,6 +586,7 @@ void eltwise_binary_func(MatrixStorage<T> &out, const MatrixStorage<T> &lhs, con
         throw_incompatible_lhs_rhs();
     }
 
+#pragma omp parallel for
     for (size_t r = 0; r < rows; r++) {
         for (size_t c = 0; c < cols; c++) {
             out[o_idx({r, c})] = func(lhs[l_idx({r, c})], rhs[r_idx({r, c})]);
@@ -835,13 +893,13 @@ template <typename T> void sum(MatrixStorage<T> &out, const MatrixStorage<T> &in
         throw std::invalid_argument(ss.str());
     }
 
-    auto out_idx = axis == 0 ? bcast0 : bcast1;
-    fill_value(out, static_cast<T>(0));
+    const size_t outer_axis = axis == 0 ? 1 : 0;
+    auto out_vals = out.slice(outer_axis, 0);
+    auto in_slices = in.slices(outer_axis, axis);
 
-    for (size_t r = 0; r < in.shape[0]; r++) {
-        for (size_t c = 0; c < in.shape[1]; c++) {
-            out[out_idx({r, c})] += in[{r, c}];
-        }
+#pragma omp parallel for
+    for (auto [out_val, in_slice] : zip(out_vals, in_slices)) {
+        out_val = std::accumulate(begin(in_slice), end(in_slice), static_cast<T>(0));
     }
 }
 
@@ -862,9 +920,29 @@ template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> 
 
     const T divisor = static_cast<T>(1) / static_cast<T>(in.shape[axis]);
 
+#if 0
+    auto o_itr = inner_itr(out.shape, 0, off_axis).begin();
+
+    for (auto outer : outer_itr(in.shape, off_axis)) {
+        T mu = 0;
+        for (auto i_offset : inner_itr(in.shape, outer, axis)) {
+            mu += in[i_offset];
+        }
+        mu *= divisor;
+
+        T variance = 0;
+        for (auto i_offset : inner_itr(in.shape, outer, axis)) {
+            const T val = in[i_offset] - mu;
+            variance += val * val;
+        }
+        out[*o_itr] = variance * divisor;
+        ++o_itr;
+    }
+#else
     auto out_idx = axis == 0 ? bcast0 : bcast1;
     auto in_idx = axis == 0 ? swap_idx : identity;
 
+#pragma omp parallel for
     for (size_t i = 0; i < in.shape[off_axis]; i++) {
         T mu = 0;
         for (size_t j = 0; j < in.shape[axis]; j++) {
@@ -879,6 +957,7 @@ template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> 
         }
         out[out_idx({i, 0})] = variance * divisor;
     }
+#endif
 }
 
 template <typename T>
@@ -926,24 +1005,18 @@ template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indic
         throw std::invalid_argument(ss.str());
     }
 
-    auto out_idx = axis == 0 ? bcast0 : bcast1;
-    auto in_idx = axis == 0 ? swap_idx : identity;
-    size_t off_axis = axis == 0 ? 1 : 0;
-    indices.resize(in.shape[off_axis]);
+    const size_t outer_axis = axis == 0 ? 1 : 0;
+    indices.resize(in.shape[outer_axis]);
 
-    for (size_t i = 0; i < in.shape[off_axis]; i++) {
-        T max_val = in[in_idx({i, 0})];
-        size_t max_idx = 0;
-        for (size_t j = 1; j < in.shape[axis]; j++) {
-            const T in_val = in[in_idx({i, j})];
-            if (in_val > max_val) {
-                max_val = in_val;
-                max_idx = j;
-            }
-        }
+    auto max_vals = out.slice(outer_axis, 0);
+    auto in_slices = in.slices(outer_axis, axis).begin();
 
-        out[out_idx({i, 0})] = max_val;
-        indices[i] = max_idx;
+#pragma omp parallel for
+    for (size_t i = 0; i < in.shape[outer_axis]; i++) {
+        auto in_slice = in.slice(axis, i);
+        const auto max_elem = std::max_element(cbegin(in_slice), cend(in_slice));
+        indices[i] = std::distance(cbegin(in_slice), max_elem);
+        max_vals[i] = *max_elem;
     }
 }
 
@@ -1008,10 +1081,12 @@ void broadcast_rows(MatrixStorage<T> &dst, MatrixStorage<T> &src, const MatrixSt
         throw std::invalid_argument(ss.str());
     }
 
-    for (size_t dst_r = 0; dst_r < dst.shape[0]; dst_r++) {
-        const size_t src_r = idx[{dst_r, 0}];
-        for (size_t c = 0; c < src.shape[1]; c++) {
-            func(dst[{dst_r, c}], src[{src_r, c}]);
+#pragma omp parallel for
+    for (auto [dst_idx, src_idx] : zip(dst.axis_iota(0), idx.slice(0, 0))) {
+        auto src_row = src.slice(1, src_idx);
+        auto dst_row = dst.slice(1, dst_idx);
+        for (auto [d, s] : zip(dst_row, src_row)) {
+            func(d, s);
         }
     }
 }

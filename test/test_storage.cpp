@@ -193,15 +193,16 @@ template <typename T> void test_sum(size_t axis) {
     throws_exception(std::invalid_argument, sum(out_fail, mat, axis));
 }
 
-template <typename T> auto make_max_axis(size_t axis) {
+template <typename T> auto make_max_data(size_t axis) {
+    const size_t off_axis = axis == 0 ? 1 : 0;
     shape_type shape;
-    size_t long_dim = 14;
-    size_t short_dim = 3;
+    size_t axis_dim = 14;
+    size_t off_axis_dim = 3;
 
     if (axis == 0) {
-        shape = {short_dim, long_dim};
+        shape = {off_axis_dim, axis_dim};
     } else if (axis == 1) {
-        shape = {long_dim, short_dim};
+        shape = {axis_dim, off_axis_dim};
     } else {
         std::stringstream ss;
         ss << "Unknown axis " << axis;
@@ -210,36 +211,42 @@ template <typename T> auto make_max_axis(size_t axis) {
 
     shape_type reduced_shape = shape;
     reduced_shape[axis] = 1;
-    auto idxr = axis == 0 ? bcast0 : bcast1;
 
     MatrixStorage<T> src(shape);
     MatrixStorage<T> expected_values(reduced_shape);
-    std::vector<size_t> expected_indices(long_dim);
+    std::vector<size_t> expected_indices(axis_dim);
 
     auto idx_func = axis == 0 ? identity : swap_idx;
 
     T val(0);
     size_t q = 0;
 
-    for (size_t j = 0; j < long_dim; j++) {
-        for (size_t i = 0; i < short_dim; i++) {
+    auto max_slice = expected_values.slice(off_axis, 0);
+    auto max_val_itr = begin(max_slice);
+    auto max_idx_itr = begin(expected_indices);
+
+    for (size_t j = 0; j < axis_dim; j++) {
+        for (size_t i = 0; i < off_axis_dim; i++) {
             src[idx_func({q, j})] = val;
-            if (i == short_dim - 1) {
-                expected_values[idxr({j, 0})] = val;
-                expected_indices[j] = q;
+            if (i == off_axis_dim - 1) {
+                *max_val_itr = val;
+                *max_idx_itr = q;
+                ++max_val_itr;
+                ++max_idx_itr;
             }
             val += static_cast<T>(1);
-            q = (q + 1) % short_dim;
+            q = (q + 1) % off_axis_dim;
         }
         // Stagger the starting index for each row/column
         // so that the max value appears at different places
-        q = (q + 1) % short_dim;
+        q = (q + 1) % off_axis_dim;
     }
+
     return std::make_tuple(std::move(shape), std::move(src), std::move(expected_values), std::move(expected_indices));
 }
 
 template <typename T> void test_max(size_t axis) {
-    auto [shape, src, expected_values, expected_indices] = make_max_axis<T>(axis);
+    auto [shape, src, expected_values, expected_indices] = make_max_data<T>(axis);
     shape[axis] = 1;
 
     MatrixStorage<T> out(shape);
