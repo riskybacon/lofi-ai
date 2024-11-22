@@ -103,11 +103,18 @@ template <typename T> struct Model {
     std::vector<Matrix<T>> parameters;
 
     Model(size_t context_size, size_t embedding_dim, size_t hidden, size_t num_tokens, std::mt19937 g) {
+        // TODO: implement Kaming initialization
+        // https://youtu.be/P6sfmUTpUmc?t=1860
+        // "Kaiming init" paper: https://arxiv.org/abs/1502.01852
+        // Batchnorm paper: https://arxiv.org/abs/1502.03167
+        T tanh_gain = static_cast<T>(5) / static_cast<T>(3);
+        T W1_scale = tanh_gain / static_cast<T>(sqrt(context_size * embedding_dim));
+        T W2_scale = tanh_gain / static_cast<T>(sqrt(hidden));
         C = Matrix<T>::randn({num_tokens, embedding_dim}, g);
-        W1 = Matrix<T>::randn({context_size * C.shape()[1], hidden}, g);
-        b1 = Matrix<T>::randn({1, hidden}, g);
-        W2 = Matrix<T>::randn({hidden, num_tokens}, g);
-        b2 = Matrix<T>::randn({1, num_tokens}, g);
+        W1 = Matrix<T>::randn({context_size * C.shape()[1], hidden}, g) * W1_scale;
+        b1 = Matrix<T>::randn({1, hidden}, g) * 0.01;
+        W2 = Matrix<T>::randn({hidden, num_tokens}, g) * W2_scale;
+        b2 = Matrix<T>::randn({1, num_tokens}, g) * 0;
 
         parameters = {C, W1, b1, W2, b2};
     }
@@ -194,10 +201,10 @@ void run(void) {
 
     std::cout << "num_parameters: " << model.num_parameters() << std::endl;
 
-    size_t num_steps = 600000;
-    size_t decay_step = 150000;
-    size_t decay_step1 = 300000;
-    size_t eval_steps = 10000;
+    size_t num_steps = 200000;
+    size_t decay_step = 100000;
+    size_t decay_step1 = 150000;
+    size_t eval_steps = 5000;
     float lr = 0.1;
 
     const size_t batch_size = 32;
