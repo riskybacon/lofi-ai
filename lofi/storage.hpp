@@ -6,6 +6,7 @@
 #include <array>
 #include <cblas.h>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <ostream>
 #include <random>
