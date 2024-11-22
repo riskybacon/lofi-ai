@@ -212,9 +212,9 @@ void run(void) {
 
     std::chrono::duration<double> duration(0);
 
+    auto start = std::chrono::high_resolution_clock::now();
     // Training loop
     for (size_t k = 0; k < num_steps; k++) {
-        const auto start = std::chrono::high_resolution_clock::now();
 
         if (k == decay_step || k == decay_step1) {
             lr *= 0.1;
@@ -249,8 +249,11 @@ void run(void) {
         auto loss = loss_fn(probs, y_batch);
 
         if (k % 500 == 0 || k == num_steps - 1) {
+            const auto end = std::chrono::high_resolution_clock::now();
+            duration = (end - start) / 500;
             std::cout << prefix << "step: " << k + 1 << "/" << num_steps << ": lr=" << lr << ", loss=" << loss.data()
                       << ", duration=" << duration.count() << " s" << std::endl;
+            start = std::chrono::high_resolution_clock::now();
         }
 
         if (training) {
@@ -258,9 +261,6 @@ void run(void) {
             loss.backward();
             model.weight_update(lr);
         }
-
-        const auto end = std::chrono::high_resolution_clock::now();
-        duration = end - start;
     }
 
     // Sample from model
