@@ -42,17 +42,27 @@ git clone https://github.com/riskybacon/lofi-ai.git
 cd lofi-ai
 ```
 
-2. Build and run example:
+2. Build
 ```bash
-cd examples
-make
-./one_layer
+mkdir build
+cd build
+cmake \
+  -DCMAKE_CXX_COMPILER=$(which g++) \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOpenBLAS_DIR=/path/to/openblas/cmake \
+  ..
+make -j
 ```
 
-3. Build and run tests:
+3. Run examples:
+```bash
+cd examples
+./mlp
+```
+
+4. Test
 ```bash
 cd test
-make
 ./test_storage
 ./test_context
 ./test_engine
