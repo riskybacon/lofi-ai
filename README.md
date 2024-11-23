@@ -68,6 +68,8 @@ cd test
 ./test_engine
 ```
 
+See MACOS.md for MacOS specific instructions.
+
 ### 🧪 Example:
 
 Example training loop for a simple network:

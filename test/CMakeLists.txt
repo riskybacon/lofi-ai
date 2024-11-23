@@ -10,8 +10,4 @@ add_executable(test_engine test_engine.cpp)
 target_include_directories(test_engine PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(test_engine PRIVATE ${OpenBLAS_LIBRARIES})
 
-add_executable(test_iterator test_iterator.cpp)
-target_include_directories(test_iterator PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(test_iterator PRIVATE ${OpenBLAS_LIBRARIES})
-
 add_subdirectory(pytorch)
