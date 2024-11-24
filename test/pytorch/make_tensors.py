@@ -1,12 +1,19 @@
+import os
 import random
+import sys
 import torch
 import torch.nn.functional as F
 
-names_fn = "../../examples/names.txt"
-data_dir = "data"
-shapes_fn = f"{data_dir}/shapes.hpp"
-
 def main():
+    names_fn = sys.argv[1]
+    data_dir = sys.argv[2]
+
+    if os.path.exists(data_dir):
+        return 0
+
+    os.makedirs(data_dir, exist_ok=True)
+
+    shapes_fn = f"{data_dir}/shapes.hpp"
     words = open(names_fn).read().splitlines()
     # build the vocabulary of characters and mappings to/from integers
     chars = sorted(list(set(''.join(words))))
@@ -82,7 +89,6 @@ def main():
     logprobs = probs.log()
     loss = -logprobs[range(Ytr.shape[0]), Ytr.squeeze()].mean()
 
-    print(f"{loss=}")
     params = [loss, logprobs, probs, counts_sum_inv, counts_sum, counts, norm_logits, logit_maxes, logits, h_w2, h, emb_w1_b1, emb_w1, emb_view, C, W1, b1, W2, b2, Xtr, Ytr] 
     params_str = ["loss", "logprobs", "probs", "counts_sum_inv", "counts_sum", "counts", "norm_logits", "logit_maxes", "logits", "h_w2", "h", "emb_w1_b1", "emb_w1", "emb_view", "C", "W1", "b1", "W2", "b2", "Xtr", "Ytr"]
 

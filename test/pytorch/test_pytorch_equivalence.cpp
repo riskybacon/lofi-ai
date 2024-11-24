@@ -199,5 +199,9 @@ template <typename T> void test_mlp() {
 
 int main() {
     test_mlp<void>();
+    const size_t num_failed = num_tests - num_passed;
+    if (num_failed > 0) {
+        return 1;
+    }
     return 0;
 }

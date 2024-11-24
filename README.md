@@ -68,6 +68,12 @@ cd test
 ./test_engine
 ```
 
+If you have PyTorch installed, check for exact equivalence with
+
+``bash
+ctest
+```
+
 See MACOS.md for MacOS specific instructions.
 
 ### 🧪 Example:

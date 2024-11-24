@@ -13,5 +13,7 @@ find_package(OpenBLAS REQUIRED)
 set(INCLUDE_DIRS ${LOFI_INCLUDE_DIR} ${OpenBLAS_INCLUDE_DIRS})
 add_definitions(-DPROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
+enable_testing()
+
 add_subdirectory(examples)
 add_subdirectory(test)
