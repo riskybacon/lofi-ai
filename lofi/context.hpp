@@ -137,12 +137,8 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
         auto [out, lhs, rhs] = lock_weak(weak);
-        MatrixStorage<T> lhs_grad(lhs->grad.shape);
-        MatrixStorage<T> rhs_grad(rhs->grad.shape);
-        multiply(lhs_grad, rhs->data, out->grad);
-        multiply(rhs_grad, lhs->data, out->grad);
-        add(lhs->grad, lhs->grad, lhs_grad);
-        add(rhs->grad, rhs->grad, rhs_grad);
+        multiply_bwd(lhs->grad, rhs->data, out->grad);
+        multiply_bwd(rhs->grad, lhs->data, out->grad);
     };
 }
 
@@ -157,11 +153,8 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     out->op = "*";
     auto weak = make_weak(out, lhs);
     out->backward = [weak, rhs]() {
-        // (m x n) = (m x n) * (m x n)
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> lhs_grad(lhs->grad.shape);
-        multiply(lhs_grad, rhs, out->grad);
-        add(lhs->grad, lhs->grad, lhs_grad);
+        multiply_bwd(lhs->grad, rhs, out->grad);
     };
 }
 
@@ -179,16 +172,7 @@ void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
     out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
         auto [out, lhs, rhs] = lock_weak(weak);
-
-        // Gradient with respect to lhs (x): ∂(x/y)/∂x = 1/y
-        // Gradient with respect to rhs (y): ∂(x/y)/∂y = -x/y^2
-        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
-            T g = out->grad.data[i];
-            T x = lhs->data.data[i];
-            T y = static_cast<T>(1) / rhs->data.data[i];
-            lhs->grad.data[i] += g * y;
-            rhs->grad.data[i] -= x * g * y * y;
-        }
+        divide_bwd(lhs->grad, rhs->grad, lhs->data, rhs->data, out->grad);
     };
 }
 
@@ -222,9 +206,7 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
     auto weak = make_weak(out, lhs);
     out->backward = [weak]() {
         auto [out, lhs] = lock_weak(weak);
-        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
-            lhs->grad.data[i] += (1 - out->data.data[i] * out->data.data[i]) * out->grad.data[i];
-        }
+        tanh_bwd(lhs->grad, out->data, out->grad);
     };
 }
 
@@ -238,11 +220,8 @@ template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->op = "exp";
     auto weak = make_weak(out, lhs);
     out->backward = [weak]() {
-        // lhs->grad += out->data * out->grad;
         auto [out, lhs] = lock_weak(weak);
-        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
-            lhs->grad.data[i] += out->data.data[i] * out->grad.data[i];
-        }
+        exp_bwd(lhs->grad, out->data, out->grad);
     };
 }
 
@@ -256,13 +235,8 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->op = "log";
     auto weak = make_weak(out, lhs);
     out->backward = [weak]() {
-        // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1201
-        // lhs->grad += (1 / lhs->data) * out->grad;
-        // or lhs->grad += (out->grad / lhs->data)
         auto [out, lhs] = lock_weak(weak);
-        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
-            lhs->grad.data[i] += out->grad.data[i] * std::pow(lhs->data.data[i], static_cast<T>(-1));
-        }
+        log_bwd(lhs->grad, lhs->data, out->grad);
     };
 }
 
@@ -278,11 +252,8 @@ template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr
     out->op = ss.str();
     auto weak = make_weak(out, lhs);
     out->backward = [weak, rhs]() {
-        // lhs->grad += rhs * std::pow(lhs->data, rhs - 1) * out->grad;
         auto [out, lhs] = lock_weak(weak);
-        for (size_t i = 0; i < lhs->grad.data.size(); i++) {
-            lhs->grad.data[i] += rhs * std::pow(lhs->data.data[i], rhs - 1) * out->grad.data[i];
-        }
+        pow_bwd(lhs->grad, lhs->data, rhs, out->grad);
     };
 }
 
@@ -299,14 +270,7 @@ void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Cont
     auto weak = make_weak(out, lhs);
     out->backward = [weak, idx]() {
         auto [out, lhs] = lock_weak(weak);
-        const size_t rows = idx->shape()[0];
-        const MatrixStorage<U> &idx_d = idx->data;
-
-        for (size_t i = 0; i < rows; i++) {
-            const size_t r = idx_d[{i, 0}];
-            const size_t c = idx_d[{i, 1}];
-            lhs->grad[{r, c}] += out->grad[{i, 0}];
-        }
+        select_rows_and_cols_bwd(lhs->grad, out->grad, idx->data);
     };
 }
 
@@ -351,15 +315,10 @@ template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr
     std::stringstream ss;
     ss << "sum(" << axis << ")";
     out->op = ss.str();
-
     auto weak = make_weak(out, lhs);
     out->backward = [weak]() {
-        // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1746
-        // lhs->grad += ones_like(lhs->data) * out->grad
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> tmp(lhs->shape(), 1);
-        multiply(tmp, tmp, out->grad);
-        add(lhs->grad, lhs->grad, tmp);
+        sum_bwd(lhs->grad, out->grad);
     };
 }
 
@@ -370,15 +329,10 @@ template <typename T> void mean(std::shared_ptr<Context<T>> &out, std::shared_pt
     std::stringstream ss;
     ss << "mean(" << axis << ")";
     out->op = ss.str();
-
     auto weak = make_weak(out, lhs);
     out->backward = [weak, axis]() {
-        // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=884
         auto [out, lhs] = lock_weak(weak);
-        const T divisor = static_cast<T>(1) / static_cast<T>(lhs->shape()[axis]);
-        MatrixStorage<T> tmp({out->grad.shape});
-        multiply(tmp, out->grad, divisor);
-        add(lhs->grad, lhs->grad, tmp);
+        mean_bwd(lhs->grad, out->grad, axis);
     };
 }
 
@@ -391,13 +345,9 @@ void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
     ss << "max(axis=" << axis << ")";
     out->op = ss.str();
     auto weak = make_weak(out, lhs);
-    out->backward = [weak, axis]() {
-        // route the gradient from out to the correct column in lhs
+    out->backward = [weak]() {
         auto [out, lhs] = lock_weak(weak);
-        MatrixStorage<T> one_h(lhs->shape());
-        one_hot(one_h, out->indices);
-        multiply(one_h, one_h, out->grad);
-        add(lhs->grad, lhs->grad, one_h);
+        max_bwd(lhs->grad, out->grad, out->indices);
     };
 }
 

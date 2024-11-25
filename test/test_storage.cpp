@@ -693,6 +693,29 @@ template <typename T> void test_stddev(size_t axis) {
     is_close(out, expected);
 }
 
+template<typename T>
+void test_fma() {
+    const shape_type shape = {3, 4};
+    MatrixStorage<T> x(shape);
+    MatrixStorage<T> y(shape);
+    MatrixStorage<T> z(shape);
+    MatrixStorage<T> out(shape);
+    MatrixStorage<T> expected(shape);
+
+    fill_mat(x, static_cast<T>(1));
+    fill_mat(y, static_cast<T>(2));
+    fill_mat(z, static_cast<T>(3));
+
+    for (size_t r = 0; r < shape[0]; r++) {
+        for (size_t c = 0; c < shape[1]; c++) {
+            expected[{r, c}] = x[{r, c}] * y[{r, c}] + z[{r, c}];
+        }
+    }
+
+    fma(out, x, y, z);
+    is_close(out, expected);
+}
+
 int main(int argc, char **argv) {
     test_constructor<float>();
     test_move_assign<float>();
@@ -735,6 +758,7 @@ int main(int argc, char **argv) {
     test_stddev<float>(0);
     test_stddev<float>(1);
 
+    test_fma<float>();
     std::cout << argv[0] << ": " << num_passed << " passed / " << num_tests << " total" << std::endl;
     return 0;
 }

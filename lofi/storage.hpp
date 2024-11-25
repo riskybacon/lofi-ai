@@ -74,6 +74,7 @@ template <size_t DIM> std::ostream &operator<<(std::ostream &out, const std::arr
 void throw_unexpected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
     std::stringstream ss;
     ss << "[" << file << ":" << line << "]: Expected shape=" << expected << ", got " << actual;
+    throw std::invalid_argument(ss.str());
 }
 
 void _assert_expected_shape(const shape_type &actual, const shape_type &expected, const char *file, const int line) {
@@ -733,6 +734,60 @@ template <typename T> MatrixStorage<T> operator*(const T &rhs, const MatrixStora
     return out;
 }
 
+/**
+ * @brief Element-wise out = x * y + z
+ */
+template <typename T>
+void fma(MatrixStorage<T> &out, const MatrixStorage<T> &x, const MatrixStorage<T> &y, const MatrixStorage<T> &z) {
+    assert_expected_shape(out.shape, x.shape);
+    assert_expected_shape(out.shape, y.shape);
+    assert_expected_shape(out.shape, z.shape);
+
+    auto out_slices = out.slices(0, 1);
+    auto x_slices = x.slices(0, 1);
+    auto y_slices = y.slices(0, 1);
+    auto z_slices = z.slices(0, 1);
+
+    for (auto [out_slice, x_slice, y_slice, z_slice] : zip(out_slices, x_slices, y_slices, z_slices)) {
+        for (auto [out_elem, x_elem, y_elem, z_elem] : zip(out_slice, x_slice, y_slice, z_slice)) {
+            out_elem = x_elem * y_elem + z_elem;
+        }
+    }
+}
+
+/**
+ * @brief Element-wise out = a * b + c
+ */
+template <typename T>
+void fma(MatrixStorage<T> &out, const T &a_elem, const MatrixStorage<T> &b, const MatrixStorage<T> &c) {
+    assert_expected_shape(out.shape, b.shape);
+    assert_expected_shape(out.shape, c.shape);
+
+    auto out_slices = out.slices(0, 1);
+    auto b_slices = b.slices(0, 1);
+    auto c_slices = c.slices(0, 1);
+
+    for (auto [out_slice, b_slice, c_slice] : zip(out_slices, b_slices, c_slices)) {
+        for (auto [out_elem, b_elem, c_elem] : zip(out_slice, b_slice, c_slice)) {
+            out_elem = a_elem * b_elem + c_elem;
+        }
+    }
+}
+
+template <typename T>
+void multiply_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &rhs_data, const MatrixStorage<T> &out_grad) {
+    MatrixStorage<T> tmp(lhs_grad.shape);
+    multiply(tmp, rhs_data, out_grad);
+    add(lhs_grad, lhs_grad, tmp);
+}
+
+template <typename T>
+void multiply_bwd(MatrixStorage<T> &lhs_grad, const T &rhs_data, const MatrixStorage<T> &out_grad) {
+    MatrixStorage<T> tmp(lhs_grad.shape);
+    multiply(tmp, rhs_data, out_grad);
+    add(lhs_grad, lhs_grad, tmp);
+}
+
 template <typename T> void divide(MatrixStorage<T> &out, const MatrixStorage<T> &rhs, const MatrixStorage<T> &lhs) {
     apply_binary_func(out, rhs, lhs, [](const T &a, const T &b) { return a / b; });
 }
@@ -749,6 +804,18 @@ template <typename T> MatrixStorage<T> operator/(const T &rhs, const MatrixStora
     MatrixStorage<T> out(lhs.shape);
     divide(out, rhs, lhs);
     return out;
+}
+
+template <typename T> void divide_bwd(MatrixStorage<T> &lhs_grad, MatrixStorage<T> &rhs_grad, const MatrixStorage<T> &lhs_data, const MatrixStorage<T> &rhs_data, const MatrixStorage<T> &out_grad) {
+    // Gradient with respect to lhs (x): ∂(x/y)/∂x = 1/y
+    // Gradient with respect to rhs (y): ∂(x/y)/∂y = -x/y^2
+    for (size_t i = 0; i < lhs_grad.data.size(); i++) {
+        T g = out_grad[i];
+        T x = lhs_data[i];
+        T y = static_cast<T>(1) / rhs_data[i];
+        lhs_grad[i] += g * y;
+        rhs_grad[i] -= x * g * y * y;
+    }
 }
 
 /**
@@ -861,20 +928,67 @@ template <typename T> void matmul(MatrixStorage<T> &out, const MatrixStorage<T> 
     gemm(CblasNoTrans, CblasNoTrans, out, lhs, rhs, static_cast<T>(1), static_cast<T>(0));
 }
 
-template <typename T> void log(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
-    eltwise_unary_func(out, in, [](const T &x) { return std::log(x); });
+template <typename T> void log(MatrixStorage<T> &y, const MatrixStorage<T> &x) {
+    eltwise_unary_func(y, x, [](const T &x_i) { return std::log(x_i); });
 }
 
-template <typename T> void tanh(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
-    return eltwise_unary_func(out, in, [](const T &x) { return std::tanh(x); });
+template <typename T>
+void log_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &x, const MatrixStorage<T> &dy) {
+    // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1201
+    for (size_t i = 0; i < dw.data.size(); i++) {
+        dw[i] += dy[i] * std::pow(x[i], static_cast<T>(-1));
+    }
 }
 
-template <typename T> void exp(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
-    return eltwise_unary_func(out, in, [](const T &x) { return std::exp(x); });
+template <typename T> void tanh(MatrixStorage<T> &y, const MatrixStorage<T> &x) {
+    return eltwise_unary_func(y, x, [](const T &x_i) { return std::tanh(x_i); });
 }
 
-template <typename T> void pow(MatrixStorage<T> &out, const MatrixStorage<T> &in, const T &y) {
-    eltwise_unary_func(out, in, [&y](const T &x) { return std::pow(x, y); });
+template <typename T>
+void tanh_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &y, const MatrixStorage<T> &dy) {
+    for (size_t i = 0; i < dw.data.size(); i++) {
+        dw.data[i] += (1 - y.data[i] * y.data[i]) * dy.data[i];
+    }
+}
+
+template <typename T> void exp(MatrixStorage<T> &y, const MatrixStorage<T> &x) {
+    return eltwise_unary_func(y, x, [](const T &x_i) { return std::exp(x_i); });
+}
+
+template <typename T>
+void exp_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &y, const MatrixStorage<T> &dy) {
+    for (size_t i = 0; i < dw.data.size(); i++) {
+        dw.data[i] += y.data[i] * dy.data[i];
+    }
+}
+
+/**
+ * @brief Element-wise y = x ** p
+ *
+ * @param y The output matrix
+ * @param x The input matrix
+ * @param p The exponent
+ */
+template <typename T> void pow(MatrixStorage<T> &y, const MatrixStorage<T> &x, const T &p) {
+    eltwise_unary_func(y, x, [&p](const T &x_i) { return std::pow(x_i, p); });
+}
+
+/**
+ * @brief Backward pass for y = pow(x, p)
+ *
+ * @param dw The gradient of the output w.r.t. the input
+ * @param x The input to pow(x, p
+ * @param p The input to pow(x, p
+ * @param dy The gradient of the output
+ */
+template <typename T>
+void pow_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &x, const T &p, const MatrixStorage<T> &dy) {
+    assert_expected_shape(dw.shape, x.shape);
+    assert_expected_shape(x.shape, dy.shape);
+
+    for (auto [dw_i, x_i, dy_i] : zip(dw.data, x.data, dy.data)) {
+        dw_i += p * std::pow(x_i, p - 1) * dy_i;
+    }
 }
 
 template <typename T> void sum(MatrixStorage<T> &out, const MatrixStorage<T> &in, const size_t axis) {
@@ -903,10 +1017,26 @@ template <typename T> void sum(MatrixStorage<T> &out, const MatrixStorage<T> &in
     }
 }
 
+template <typename T> void sum_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy) {
+    // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=1746
+    // lhs->grad += ones_like(lhs->data) * out->grad
+    MatrixStorage<T> tmp(dw.shape, 1);
+    multiply(tmp, tmp, dy);
+    add(dw, dw, tmp);
+}
+
 template <typename T> void mean(MatrixStorage<T> &out, const MatrixStorage<T> &in, const size_t axis) {
     const T divisor = static_cast<T>(1) / static_cast<T>(in.shape[axis]);
     sum(out, in, axis);
     multiply(out, out, divisor);
+}
+
+template <typename T> void mean_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy, const size_t axis) {
+    // https://youtu.be/q8SA3rM6ckI?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=884
+    const T divisor = static_cast<T>(1) / static_cast<T>(dw.shape[axis]);
+    MatrixStorage<T> tmp(dy.shape);
+    multiply(tmp, dy, divisor);
+    add(dw, dw, tmp);
 }
 
 template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> &in, const size_t axis) {
@@ -961,7 +1091,7 @@ template <typename T> void stddev(MatrixStorage<T> &out, const MatrixStorage<T> 
 }
 
 template <typename T>
-void stddev_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &lhs_data, const MatrixStorage<T> &out_grad,
+void stddev_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &lhs_data, const MatrixStorage<T> &prev_grad,
                 const MatrixStorage<T> &out_data, size_t axis) {
     MatrixStorage<T> mu(out_data.shape);
     mean(mu, lhs_data, axis);
@@ -980,7 +1110,7 @@ void stddev_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &lhs_data, co
     for (size_t i = 0; i < lhs_grad.shape[off_axis]; i++) {
         const T half_sigma = static_cast<T>(1) / (static_cast<T>(2) * sqrt(out_data[b_idx({i, 0})]));
         const T mu_i = mu[b_idx({i, 0})];
-        const T g_i = out_grad[b_idx({i, 0})];
+        const T g_i = prev_grad[b_idx({i, 0})];
         for (size_t j = 0; j < lhs_grad.shape[axis]; j++) {
             const T xi = lhs_data[idx({i, j})];
             const T dvar_dxi = two_over_n * (xi - mu_i);
@@ -1020,8 +1150,17 @@ template <typename T> void max(MatrixStorage<T> &out, std::vector<size_t> &indic
     }
 }
 
-template <typename T> void sqrt(MatrixStorage<T> &out, const MatrixStorage<T> &in) {
-    eltwise_unary_func(out, in, [](const T &x) { return std::sqrt(x); });
+template <typename T>
+void max_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy, const std::vector<size_t> &indices) {
+    // route the gradient from out to the correct column in lhs
+    MatrixStorage<T> one_h(dw.shape);
+    one_hot(one_h, indices);
+    multiply(one_h, one_h, dy);
+    add(dw, dw, one_h);
+}
+
+template <typename T> void sqrt(MatrixStorage<T> &y, const MatrixStorage<T> &x) {
+    eltwise_unary_func(y, x, [](const T &x_i) { return std::sqrt(x_i); });
 }
 
 template <typename T, typename U>
@@ -1043,6 +1182,17 @@ void select_rows_and_cols(MatrixStorage<T> &lhs, MatrixStorage<T> &rhs, const Ma
         lhs[{i, 0}] = rhs[{idx[{i, 0}], idx[{i, 1}]}];
     }
 }
+
+template <typename T, typename U>
+void select_rows_and_cols_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy,
+                              const MatrixStorage<U> &idx) {
+    const size_t rows = idx.shape[0];
+    for (size_t i = 0; i < rows; i++) {
+        const size_t r = idx[{i, 0}];
+        const size_t c = idx[{i, 1}];
+        dw[{r, c}] += dy[{i, 0}];
+    }
+};
 
 /**
  * @brief Broadcast rows from the source matrix and assigns them to the destination matrix.
@@ -1153,27 +1303,27 @@ void select_embeddings(MatrixStorage<T> &selected, const MatrixStorage<T> &emb, 
 /**
  * @brief backwards pass for select_embeddings
  *
- * @param demb  output: the gradient to be applied to emb. Must be an `m` x `n`
+ * @param dw  output: the gradient to be applied to emb. Must be an `m` x `n`
  *              matrix
- * @param dselected  dL/dselected, this matrix must have shape
+ * @param dy  dL/dy, this matrix must have shape
  *            (`i` x (`j` * `n`))
  * @param x the embeddings to select from emb. This is an `i` by `j` matrix,
  *          where each row corresponds to a context block, and `j` is the
  *          number of tokens in a single context block
  */
 template <typename T>
-void select_embeddings_bwd(MatrixStorage<T> &demb, const MatrixStorage<T> &dselected, const MatrixStorage<size_t> &x) {
+void select_embeddings_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy, const MatrixStorage<size_t> &x) {
     // Dimensionality / number of values in a single embedding
-    size_t dims = demb.shape[1];
-    fill_value(demb, static_cast<T>(0));
+    size_t dims = dw.shape[1];
+    fill_value(dw, static_cast<T>(0));
 
-    // Route the gradient from dselected into demb
+    // Route the gradient from dy into dw
     for (size_t r = 0; r < x.shape[0]; r++) {
         for (size_t c = 0; c < x.shape[1]; c++) {
             const auto token = x[{r, c}];
             const auto offset = c * dims;
             for (size_t d = 0; d < dims; d++) {
-                demb[{token, d}] += dselected[{r, d + offset}];
+                dw[{token, d}] += dy[{r, d + offset}];
             }
         }
     }

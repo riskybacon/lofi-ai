@@ -15,7 +15,7 @@ machine learning frameworks. I'm specifically interested in CUDA support.
 
 ### 📋 Requirements / Dependencies
 
-* C++20 capable compiler
+* C++23 capable compiler
 * Openblas
 * CMake
 
