@@ -212,13 +212,13 @@ template <typename T> struct MatrixStorage {
         return *this;
     }
 
-    MatrixStorage operator*(const MatrixStorage &rhs) {
+    MatrixStorage operator*(const MatrixStorage &rhs) const {
         MatrixStorage out(shape);
         multiply(out, *this, rhs);
         return out;
     }
 
-    MatrixStorage operator*(const value_type &rhs) {
+    MatrixStorage operator*(const value_type &rhs) const {
         MatrixStorage out(shape);
         multiply(out, *this, rhs);
         return out;
@@ -774,18 +774,49 @@ void fma(MatrixStorage<T> &out, const T &a_elem, const MatrixStorage<T> &b, cons
     }
 }
 
-template <typename T>
-void multiply_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &rhs_data, const MatrixStorage<T> &out_grad) {
-    MatrixStorage<T> tmp(lhs_grad.shape);
-    multiply(tmp, rhs_data, out_grad);
-    add(lhs_grad, lhs_grad, tmp);
-}
+// template <typename T>
+// void multiply_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &rhs_data, const MatrixStorage<T> &out_grad) {
+//     MatrixStorage<T> tmp(lhs_grad.shape);
+//     multiply(tmp, rhs_data, out_grad);
+//     add(lhs_grad, lhs_grad, tmp);
+// }
 
 template <typename T>
 void multiply_bwd(MatrixStorage<T> &lhs_grad, const T &rhs_data, const MatrixStorage<T> &out_grad) {
     MatrixStorage<T> tmp(lhs_grad.shape);
     multiply(tmp, rhs_data, out_grad);
     add(lhs_grad, lhs_grad, tmp);
+}
+
+
+template <typename T>
+void multiply_bwd(MatrixStorage<T> &dx, MatrixStorage<T> &dy, const MatrixStorage<T> &x, const MatrixStorage<T> &y, const MatrixStorage<T> &dz) {
+    if (x.shape == y.shape) {
+        dx += dz * y;
+        dy += dz * x;
+    } else if (x.shape[0] == 1 and y.shape == dz.shape) {
+        MatrixStorage<T> tmp(x.shape);
+        sum(tmp, dz * y, 0);
+        dx += tmp;
+        dy += dz * x;
+    } else if (x.shape[1] == 1 and y.shape == dz.shape) {
+        MatrixStorage<T> tmp(x.shape);
+        sum(tmp, dz * y, 1);
+        dx += tmp;
+        dy += dx * x;
+    } else if (y.shape[0] == 1 and x.shape == dz.shape) {
+        MatrixStorage<T> tmp(y.shape);
+        dx += dz * y;
+        sum(tmp, dz * x, 0);
+        dy += tmp;
+    } else if (y.shape[1] == 1 and x.shape == dz.shape) {
+        MatrixStorage<T> tmp(y.shape);
+        dx += dz * y;
+        sum(tmp, dz * x, 1);
+        dy += tmp;
+    } else {
+        throw std::invalid_argument("Shapes are incompatible for multiply_bwd");
+    }
 }
 
 template <typename T> void divide(MatrixStorage<T> &out, const MatrixStorage<T> &rhs, const MatrixStorage<T> &lhs) {

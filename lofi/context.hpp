@@ -137,8 +137,7 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     out->backward = [weak]() {
         // (m x n) = (m x n) * (m x n)
         auto [out, lhs, rhs] = lock_weak(weak);
-        multiply_bwd(lhs->grad, rhs->data, out->grad);
-        multiply_bwd(rhs->grad, lhs->data, out->grad);
+        multiply_bwd(lhs->grad, rhs->grad, lhs->data, rhs->data, out->grad);
     };
 }
 
