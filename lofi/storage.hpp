@@ -774,13 +774,6 @@ void fma(MatrixStorage<T> &out, const T &a_elem, const MatrixStorage<T> &b, cons
     }
 }
 
-// template <typename T>
-// void multiply_bwd(MatrixStorage<T> &lhs_grad, const MatrixStorage<T> &rhs_data, const MatrixStorage<T> &out_grad) {
-//     MatrixStorage<T> tmp(lhs_grad.shape);
-//     multiply(tmp, rhs_data, out_grad);
-//     add(lhs_grad, lhs_grad, tmp);
-// }
-
 template <typename T>
 void multiply_bwd(MatrixStorage<T> &lhs_grad, const T &rhs_data, const MatrixStorage<T> &out_grad) {
     MatrixStorage<T> tmp(lhs_grad.shape);
@@ -788,32 +781,51 @@ void multiply_bwd(MatrixStorage<T> &lhs_grad, const T &rhs_data, const MatrixSto
     add(lhs_grad, lhs_grad, tmp);
 }
 
-
 template <typename T>
 void multiply_bwd(MatrixStorage<T> &dx, MatrixStorage<T> &dy, const MatrixStorage<T> &x, const MatrixStorage<T> &y, const MatrixStorage<T> &dz) {
     if (x.shape == y.shape) {
-        dx += dz * y;
-        dy += dz * x;
+        fma(dx, dz, y, dx);
+        fma(dy, dz, x, dy);
     } else if (x.shape[0] == 1 and y.shape == dz.shape) {
-        MatrixStorage<T> tmp(x.shape);
-        sum(tmp, dz * y, 0);
-        dx += tmp;
-        dy += dz * x;
+        for (size_t c = 0; c < dz.shape[1]; c++) {
+            T acc = 0;
+            const T x_val = x[{0, c}];
+            for (size_t r = 0; r < dz.shape[0]; r++) {
+                acc += dz[{r, c}] * y[{r, c}];
+                dy[{r, c}] += dz[{r, c}] * x_val;
+            }
+            dx[{0, c}] += acc;
+        }
     } else if (x.shape[1] == 1 and y.shape == dz.shape) {
-        MatrixStorage<T> tmp(x.shape);
-        sum(tmp, dz * y, 1);
-        dx += tmp;
-        dy += dx * x;
+        for (size_t r = 0; r < dz.shape[0]; r++) {
+            const T x_val = x[{r, 0}];
+            T acc = 0;
+            for (size_t c = 0; c < dz.shape[1]; c++) {
+                acc  += dz[{r, c}] * y[{r, c}];
+                dy[{r, c}] += dz[{r, c}] * x_val;
+            }
+            dx += acc;
+        }
     } else if (y.shape[0] == 1 and x.shape == dz.shape) {
-        MatrixStorage<T> tmp(y.shape);
-        dx += dz * y;
-        sum(tmp, dz * x, 0);
-        dy += tmp;
-    } else if (y.shape[1] == 1 and x.shape == dz.shape) {
-        MatrixStorage<T> tmp(y.shape);
-        dx += dz * y;
-        sum(tmp, dz * x, 1);
-        dy += tmp;
+        for (size_t c = 0; c < dx.shape[1]; c++) {
+            const T y_val = y[{0, c}];
+            T acc = 0;
+            for (size_t r = 0; r < dx.shape[0]; r++) {
+                dx[{r, c}] += dz[{r, c}] * y_val;
+                acc += dz[{c, r}] * x[{c, r}];
+            }
+            dy[{0, c}] += acc;
+        }
+     } else if (y.shape[1] == 1 and x.shape == dz.shape) {
+        for (size_t r = 0; r < dx.shape[0]; r++) {
+            const T y_val = y[{r, 0}];
+            T acc = 0;
+            for (size_t c = 0; c < dx.shape[1]; c++) {
+                dx[{r, c}] += dz[{r, c}] * y_val;
+                acc += dz[{r, c}] * x[{r, c}];
+            }
+            dy[{r, 0}] += acc;
+        }
     } else {
         throw std::invalid_argument("Shapes are incompatible for multiply_bwd");
     }
