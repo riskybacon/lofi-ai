@@ -201,13 +201,13 @@ void run(void) {
 
     std::cout << "num_parameters: " << model.num_parameters() << std::endl;
 
-    size_t num_steps = 200000;
-    size_t decay_step = 100000;
-    size_t decay_step1 = 150000;
+    size_t num_steps = 100000;
+    size_t decay_step = 50000;
+    size_t decay_step1 = 75000;
     size_t eval_steps = 5000;
     float lr = 0.1;
 
-    const size_t batch_size = 32;
+    const size_t batch_size = 64;
     const size_t zero = 0;
 
     std::chrono::duration<double> duration(0);
