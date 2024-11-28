@@ -17,6 +17,12 @@
 
 #include <lofi/generator.hpp>
 
+#ifdef BOUNDS_CHECK
+constexpr bool _BOUNDS_CHECK = true;
+#else
+constexpr bool _BOUNDS_CHECK = false;
+#endif
+
 using shape_type = std::array<size_t, 2>;
 using std::begin;
 using std::end;
@@ -334,14 +340,27 @@ template <typename T> struct MatrixStorage {
         return out;
     }
 
-    value_type &operator[](size_t idx) { return data[idx]; }
-    const value_type &operator[](size_t idx) const { return data[idx]; }
+    value_type &operator[](size_t idx) {
+        if constexpr (_BOUNDS_CHECK) {
+            return data.at(idx);
+        } else {
+            return data[idx];
+        }
+    }
+
+    const value_type &operator[](size_t idx) const {
+        if constexpr (_BOUNDS_CHECK) {
+            return data.at(idx);
+        } else {
+            return data[idx];
+        }
+    }
 
     const size_t offset(const shape_type &idx) const { return idx[0] * shape[1] + idx[1]; }
 
-    value_type &operator[](const shape_type &idx) { return data[offset(idx)]; }
+    value_type &operator[](const shape_type &idx) { return operator[](offset(idx)); }
 
-    const value_type &operator[](const shape_type &idx) const { return data[offset(idx)]; }
+    const value_type &operator[](const shape_type &idx) const { return operator[](offset(idx)); }
 
     template <typename U> MatrixStorage operator[](MatrixStorage<U> &idx) {
         MatrixStorage out({idx.shape[0], 1});
