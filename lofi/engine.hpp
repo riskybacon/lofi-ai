@@ -31,9 +31,8 @@ template <typename T> struct Matrix {
     Matrix(context_ptr_type &&ctx) : ctx_(ctx) {}
 
     static Matrix zeros(const shape_type &shape) {
-        Matrix out;
-        out.ctx_ = std::make_shared<context_type>(shape);
-        out.ctx_->fill_zeros();
+        Matrix out(shape);
+        fill_value(out.ctx_->data, value_type(0));
         return out;
     }
 
@@ -42,9 +41,8 @@ template <typename T> struct Matrix {
     }
 
     static Matrix ones(const shape_type &shape) {
-        Matrix out;
-        out.ctx_ = std::make_shared<context_type>(shape);
-        out.ctx_->fill_ones();
+        Matrix out(shape);
+        fill_value(out.ctx_->data, value_type(1));
         return out;
     }
 
