@@ -1239,6 +1239,12 @@ void select_rows_and_cols(MatrixStorage<T> &lhs, MatrixStorage<T> &rhs, const Ma
         throw std::invalid_argument(ss.str());
     }
 
+    const shape_type expected_lhs_shape = {idx.shape[0], 1};
+    assert_expected_shape(lhs.shape, expected_lhs_shape);
+
+    const shape_type expected_rhs_shape = {idx.shape[0], rhs.shape[1]};
+    assert_expected_shape(rhs.shape, expected_rhs_shape);
+
     const size_t rows = static_cast<size_t>(idx.shape[0]);
     for (size_t i = 0; i < rows; i++) {
         lhs[{i, 0}] = rhs[{idx[{i, 0}], idx[{i, 1}]}];
