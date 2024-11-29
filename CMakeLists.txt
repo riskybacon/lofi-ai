@@ -18,10 +18,8 @@ enable_testing()
 add_subdirectory(examples)
 add_subdirectory(test)
 
-# Add an option for BOUNDS_CHECK
 option(ENABLE_BOUNDS_CHECK "Enable bounds checking" OFF)
 
-# Add the BOUNDS_CHECK define if the option is enabled
 if(ENABLE_BOUNDS_CHECK)
     add_compile_definitions(BOUNDS_CHECK)
 endif()
