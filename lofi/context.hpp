@@ -119,7 +119,7 @@ void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
     out->backward = [weak]() {
         auto [out, lhs, rhs] = lock_weak(weak);
         add(lhs->grad, lhs->grad, out->grad);
-        add(rhs->grad, rhs->grad, out->grad);
+        subtract(rhs->grad, rhs->grad, out->grad);
     };
 }
 
