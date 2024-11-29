@@ -8,9 +8,6 @@ def main():
     names_fn = sys.argv[1]
     data_dir = sys.argv[2]
 
-    if os.path.exists(data_dir):
-        return 0
-
     os.makedirs(data_dir, exist_ok=True)
 
     shapes_fn = f"{data_dir}/shapes.hpp"
@@ -32,7 +29,6 @@ def main():
                 ix = stoi[ch]
                 X.append(context)
                 Y.append(ix)
-                # print(''.join(itos[i] for i in context), '--->', itos[ix])
                 context = context[1:] + [ix] # crop and append
 
         X = torch.tensor(X)
@@ -48,33 +44,36 @@ def main():
     Xtr = Xtr[:32]
     Ytr = Ytr[:32]
 
-    # Xdev, Ydev = build_dataset(words[n1:n2])
-    # Xte, Yte = build_dataset(words[n2:])    
-
-
     g = torch.Generator().manual_seed(2147483647) # for reproducibility
 
     # Create embedding lookup table C
     # Embed our 27 possible characters into a lower dimensional space
-    # To start, let's embed them into a 2D space.
     # Each character will have a 2D embedding
     C = torch.randn((27, 2), generator=g, requires_grad=True)
-
-    # To embed all of the integers in X simultaneously, just use C[X]
     emb = C[Xtr]  # shape: 32, 3, 2
 
-    # Number of inputs is 6, because we have three 2D embeddings
-    # Let's pick 100 neurons
     hidden_size = 10
     W1 = torch.randn((3 * 2, hidden_size), generator=g, requires_grad=True)
     b1 = torch.randn((1, hidden_size), generator=g, requires_grad=True)
     W2 = torch.randn((hidden_size, 27), generator=g, requires_grad=True)
     b2 = torch.randn((1, 27), requires_grad=True)
+    bngain = torch.ones((1, hidden_size), requires_grad=True)
+    bnbias = torch.zeros((1, hidden_size), requires_grad=True)
 
     emb_view = emb.view(emb.shape[0], W1.shape[0])
     emb_w1 = emb_view @ W1
-    emb_w1_b1 = emb_w1 + b1
-    h = torch.tanh(emb_w1_b1)
+    hprebn = emb_w1 + b1
+
+    bnmeani = hprebn.mean(0, keepdims=True)
+    bndiff = hprebn - bnmeani
+    bndiff2 = bndiff.pow(2)
+    bndiff2_div_n = bndiff2 * (1 / (hidden_size - 1))
+    bnvar = bndiff2_div_n.sum(0, keepdims=True)
+    bnvar_inv = (bnvar + 1e-5).pow(-0.5)
+    bnraw = bndiff * bnvar_inv
+    hpreact = bngain * bnraw + bnbias
+
+    h = torch.tanh(hpreact)
 
     h_w2 = h @ W2
     logits = h_w2 + b2
@@ -89,8 +88,8 @@ def main():
     logprobs = probs.log()
     loss = -logprobs[range(Ytr.shape[0]), Ytr.squeeze()].mean()
 
-    params = [loss, logprobs, probs, counts_sum_inv, counts_sum, counts, norm_logits, logit_maxes, logits, h_w2, h, emb_w1_b1, emb_w1, emb_view, C, W1, b1, W2, b2, Xtr, Ytr] 
-    params_str = ["loss", "logprobs", "probs", "counts_sum_inv", "counts_sum", "counts", "norm_logits", "logit_maxes", "logits", "h_w2", "h", "emb_w1_b1", "emb_w1", "emb_view", "C", "W1", "b1", "W2", "b2", "Xtr", "Ytr"]
+    params = [loss, logprobs, probs, counts_sum_inv, counts_sum, counts, norm_logits, logit_maxes, logits, h_w2, h, hpreact, bnraw, bnvar_inv, bnvar, bndiff2_div_n, bndiff2, bndiff, bnmeani, bngain, bnbias, hprebn, emb_w1, emb_view, C, W1, b1, W2, b2, Xtr, Ytr]
+    params_str = ["loss", "logprobs", "probs", "counts_sum_inv", "counts_sum", "counts", "norm_logits", "logit_maxes", "logits", "h_w2", "h", "hpreact", "bnraw", "bnvar_inv", "bnvar", "bndiff2_div_n", "bndiff2", "bndiff", "bnmeani", "bngain", "bnbias", "hprebn", "emb_w1", "emb_view", "C", "W1", "b1", "W2", "b2", "Xtr", "Ytr"]
 
     for p, n in zip(params, params_str):
         if p.dtype in {torch.float32, torch.float64}:

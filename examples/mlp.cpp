@@ -256,6 +256,11 @@ void run(void) {
             start = std::chrono::high_resolution_clock::now();
         }
 
+        if (k == 0) {
+            draw_dot(loss, "mlp.dot", "TB");
+            generate_svg_from_dot("mlp.dot", "mlp.svg");
+        }
+
         if (training) {
             loss.zero_grad();
             loss.backward();
