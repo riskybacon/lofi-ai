@@ -831,7 +831,7 @@ void multiply_bwd(MatrixStorage<T> &dx, MatrixStorage<T> &dy, const MatrixStorag
             T acc = 0;
             for (size_t r = 0; r < dx.shape[0]; r++) {
                 dx[{r, c}] += dz[{r, c}] * y_val;
-                acc += dz[{c, r}] * x[{c, r}];
+                acc += dz[{r, c}] * x[{r, c}];
             }
             dy[{0, c}] += acc;
         }

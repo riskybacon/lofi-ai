@@ -105,6 +105,22 @@ void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std
 }
 
 /**
+ * @brief element-wise addition of two matrices
+ */
+template <typename T>
+void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T &rhs) {
+    add(out->data, lhs->data, rhs);
+    out->prev = {lhs};
+    lhs->degrees++;
+    out->op = "+";
+    auto weak = make_weak(out, lhs);
+    out->backward = [weak]() {
+        auto [out, lhs] = lock_weak(weak);
+        add(lhs->grad, lhs->grad, out->grad);
+    };
+}
+
+/**
  * @brief element-wise subtraction of two matrices
  */
 template <typename T>
