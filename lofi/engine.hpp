@@ -137,8 +137,7 @@ template <typename T> struct Matrix {
      *         where each element is drawn from N(mean, variance).
      */
     static Matrix randn(const shape_type &shape, std::mt19937 &gen, float mean = 0.0, float variance = 1.0) {
-        Matrix out;
-        out.ctx_ = std::make_shared<context_type>(shape);
+        Matrix out(shape);
         fill_randn(out.ctx_->data, gen, mean, variance);
         return out;
     }
@@ -167,7 +166,7 @@ template <typename T> struct Matrix {
     Matrix operator+(const value_type &&rhs) { return *this + rhs; }
 
     Matrix &operator+=(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         add(out.ctx_, ctx_, rhs.ctx_);
         ctx_ = out.ctx_;
         return *this;
@@ -191,7 +190,7 @@ template <typename T> struct Matrix {
     }
 
     Matrix operator-(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         subtract(out.ctx_, ctx_, rhs.ctx_);
         return out;
     }
@@ -207,7 +206,7 @@ template <typename T> struct Matrix {
     Matrix operator-(const value_type &&rhs) { return *this - rhs; }
 
     Matrix operator*(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         multiply(out.ctx_, ctx_, rhs.ctx_);
         return out;
     }
@@ -223,7 +222,7 @@ template <typename T> struct Matrix {
     Matrix operator*(const value_type &&rhs) { return *this * rhs; }
 
     Matrix &operator*=(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         multiply(out.ctx_, ctx_, rhs.ctx_);
         ctx_ = out.ctx_;
         return *this;
@@ -232,7 +231,7 @@ template <typename T> struct Matrix {
     Matrix &operator*=(Matrix &&rhs) { return *this *= rhs; }
 
     Matrix operator/(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         divide(out.ctx_, ctx_, rhs.ctx_);
         return out;
     }
@@ -248,7 +247,7 @@ template <typename T> struct Matrix {
     Matrix operator/(const value_type &&rhs) { return *this / rhs; }
 
     Matrix &operator/=(Matrix &rhs) {
-        Matrix out(shape());
+        Matrix out(max_shape(shape(), rhs.shape()));
         divide(out.ctx_, ctx_, rhs.ctx_);
         ctx_ = out.ctx_;
         return *this;
