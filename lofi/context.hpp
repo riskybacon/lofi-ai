@@ -14,6 +14,13 @@
 #include <lofi/storage.hpp>
 
 static size_t ref_count = 0;
+static bool no_grad_ = false;
+
+struct no_grad {
+    bool prev_no_grad;
+    no_grad() : prev_no_grad(no_grad_) { no_grad_ = true; }
+    ~no_grad() { no_grad_ = prev_no_grad; }
+};
 
 /**
  * @brief A node in a graph
@@ -92,6 +99,11 @@ auto lock_weak(const std::tuple<std::weak_ptr<Ts>...>& weak_tuple) {
 template <typename T>
 void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
     add(out->data, lhs->data, rhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs, rhs};
     lhs->degrees++;
     rhs->degrees++;
@@ -110,6 +122,11 @@ void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std
 template <typename T>
 void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T &rhs) {
     add(out->data, lhs->data, rhs);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "+";
@@ -126,6 +143,11 @@ void add(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
 template <typename T>
 void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
     subtract(out->data, lhs->data, rhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs, rhs};
     lhs->degrees++;
     rhs->degrees++;
@@ -145,6 +167,11 @@ void subtract(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
 template <typename T>
 void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
     multiply(out->data, lhs->data, rhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs, rhs};
     lhs->degrees++;
     rhs->degrees++;
@@ -163,6 +190,11 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
 template <typename T>
 void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T rhs) {
     multiply(out->data, lhs->data, rhs);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "*";
@@ -179,6 +211,11 @@ void multiply(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs
 template <typename T>
 void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
     divide(out->data, lhs->data, rhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs, rhs};
     lhs->degrees++;
     rhs->degrees++;
@@ -197,6 +234,11 @@ void divide(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
 template <typename T>
 void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, std::shared_ptr<Context<T>> &rhs) {
     matmul(out->data, lhs->data, rhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs, rhs};
     lhs->degrees++;
     rhs->degrees++;
@@ -215,6 +257,11 @@ void matmul(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, 
  */
 template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     tanh(out->data, lhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "tanh";
@@ -230,6 +277,11 @@ template <typename T> void tanh(std::shared_ptr<Context<T>> &out, std::shared_pt
  */
 template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     exp(out->data, lhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "exp";
@@ -245,6 +297,11 @@ template <typename T> void exp(std::shared_ptr<Context<T>> &out, std::shared_ptr
  */
 template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs) {
     log(out->data, lhs->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "log";
@@ -260,6 +317,11 @@ template <typename T> void log(std::shared_ptr<Context<T>> &out, std::shared_ptr
  */
 template <typename T> void pow(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const T &rhs) {
     pow(out->data, lhs->data, rhs);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     std::stringstream ss;
@@ -279,6 +341,11 @@ template <typename T, typename U>
 void select_rows_and_cols(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs,
                           std::shared_ptr<Context<U>> &idx) {
     select_rows_and_cols(out->data, lhs->data, idx->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "select";
@@ -293,6 +360,11 @@ template <typename T, typename U>
 void select_embeddings(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &emb,
                        std::shared_ptr<Context<U>> &idx) {
     select_embeddings(out->data, emb->data, idx->data);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {emb};
     emb->degrees++;
     out->op = "select";
@@ -310,6 +382,11 @@ template <typename T, typename U>
 void broadcast_rows(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &src,
                     std::shared_ptr<Context<U>> &idx) {
     broadcast_rows(out->data, src->data, idx->data, assign_op<T>);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {src};
     src->degrees++;
     out->op = "broadcast";
@@ -325,6 +402,11 @@ void broadcast_rows(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>
  */
 template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
     sum(out->data, lhs->data, axis);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     std::stringstream ss;
@@ -339,6 +421,11 @@ template <typename T> void sum(std::shared_ptr<Context<T>> &out, std::shared_ptr
 
 template <typename T> void mean(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
     mean(out->data, lhs->data, axis);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     std::stringstream ss;
@@ -354,6 +441,11 @@ template <typename T> void mean(std::shared_ptr<Context<T>> &out, std::shared_pt
 template <typename T>
 void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, const size_t axis) {
     max(out->data, out->indices, lhs->data, axis);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     std::stringstream ss;
@@ -366,8 +458,13 @@ void max(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, con
     };
 }
 
-template <typename T> void stddev(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, size_t axis) {
-    stddev(out->data, lhs->data, axis);
+template <typename T> void stddev(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &lhs, size_t axis, const T correction) {
+    stddev(out->data, lhs->data, axis, correction);
+
+    if (no_grad_) {
+        return;
+    }
+
     out->prev = {lhs};
     lhs->degrees++;
     out->op = "std";
