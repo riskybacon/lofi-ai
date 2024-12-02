@@ -94,63 +94,6 @@ auto build_dataset(std::vector<std::string>::iterator &w_begin, std::vector<std:
     return std::make_tuple(X, Y);
 }
 
-template <typename T> struct BatchNorm1D {
-    const T eps;
-    const T momentum;
-    const T one_minus_momentum;
-    Matrix<T> mean_running;
-    Matrix<T> std_running;
-    Matrix<T> gamma;
-    Matrix<T> beta;
-    bool training_ = true;
-
-    BatchNorm1D(const size_t features, const T momentum = 0.1, const T eps = 1e-5) : eps(eps), momentum(momentum), one_minus_momentum(static_cast<T>(1) - momentum) {
-        mean_running = Matrix<T>::zeros({1, features});
-        std_running = Matrix<T>::ones({1, features});
-        gamma = Matrix<T>::ones({1, features});
-        beta = Matrix<T>::zeros({1, features});
-    }
-
-    Matrix<T> forward(Matrix<T> &x) {
-        if (training_) {
-            return forward_training(x);
-        } else {
-            return forward_inference(x);
-        }
-    }
-
-    Matrix<T> forward_training(Matrix<T> &x) {
-        const size_t n = x.shape()[0];
-        auto meani = x.mean(0);
-        auto diff = x - meani;
-        auto diff2 = diff.pow(2.0f);
-        auto diff2_div_n = diff2 * (static_cast<T>(1) / static_cast<T>(n - 1));
-        auto var = diff2_div_n.sum(0);
-        auto std = (var + eps).pow(0.5f);
-        auto std_inv = std.pow(-1.0f);
-
-        {
-            no_grad no_grad_;
-            mean_running = mean_running * one_minus_momentum + meani * momentum;
-            std_running = std_running * one_minus_momentum + std * momentum;
-        }
-
-        auto raw = diff * std_inv;
-        auto xhat = gamma * raw + beta;
-        return xhat;
-    }
-
-    Matrix<T> forward_inference(Matrix<T> &x) {
-        auto std_running_inv = std_running.pow(-1.0f);
-        auto xhat = gamma * (x - mean_running) * std_running_inv + beta;
-        return xhat;
-    }
-
-    void training(bool tr) { training_ = tr; }
-
-    std::vector<Matrix<T>> parameters() { return {gamma, beta}; }
-};
-
 template <typename T> struct Model {
     Matrix<T> C;
     Matrix<T> W1;
@@ -164,7 +107,6 @@ template <typename T> struct Model {
         // TODO: implement Kaming initialization
         // https://youtu.be/P6sfmUTpUmc?t=1860
         // "Kaiming init" paper: https://arxiv.org/abs/1502.01852
-        // Batchnorm paper: https://arxiv.org/abs/1502.03167
         T tanh_gain = static_cast<T>(5) / static_cast<T>(3);
         T W1_scale = tanh_gain / static_cast<T>(sqrt(context_size * embedding_dim));
         T W2_scale = tanh_gain / static_cast<T>(sqrt(hidden));

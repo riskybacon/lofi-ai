@@ -31,7 +31,7 @@ template <typename T> void test_mlp() {
     auto bnbias = Matrix<float>::from_file("data/bnbias.bin", shapes["bnbias"], "bnbias");
 
     const size_t hidden_size = W1.shape()[1];
-
+    const size_t batch_size = Xtr.shape()[0];
     auto emb = select_embeddings(C, Xtr);
     auto emb_w1 = matmul(emb, W1);
     auto hprebn = emb_w1 + b1;
@@ -39,12 +39,11 @@ template <typename T> void test_mlp() {
     auto bnmeani = hprebn.mean(0);
     auto bndiff = hprebn - bnmeani;
     auto bndiff2 = bndiff.pow(2);
-    auto bndiff2_div_n = bndiff2 * (1.0f / (hidden_size - 1));
+    auto bndiff2_div_n = bndiff2 * (1.0f / batch_size);
     auto bnvar = bndiff2_div_n.sum(0);
     auto bnvar_inv = (bnvar + 1e-5).pow(-0.5);
     auto bnraw = bndiff * bnvar_inv;
     auto hpreact = bngain * bnraw + bnbias;
-
     auto h = hpreact.tanh();
     auto h_w2 = matmul(h, W2);
     auto logits = h_w2 + b2;
@@ -115,7 +114,7 @@ template <typename T> void test_mlp() {
 };
 
 int main() {
-    test_mlp<void>();
+    test_mlp<float>();
     const size_t num_failed = num_tests - num_passed;
     if (num_failed > 0) {
         return 1;

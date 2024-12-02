@@ -475,6 +475,28 @@ template <typename T> void stddev(std::shared_ptr<Context<T>> &out, std::shared_
     };
 }
 
+template <typename T>
+void batchnorm_1d(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &mean_running, std::shared_ptr<Context<T>> &std_running,
+                  const std::shared_ptr<Context<T>> &rhs, const std::shared_ptr<Context<T>> &gamma, const std::shared_ptr<Context<T>> &beta,
+                  const T momentum, const T eps) {
+    batchnorm_1d(out->data, mean_running->data, std_running->data, rhs->data, gamma->data, beta->data, momentum, eps);
+
+    if (no_grad_) {
+        return;
+    }
+
+    out->prev = {rhs, gamma};
+    rhs->degrees++;
+    gamma->degrees++;
+    out->op = "batchnorm_1d";
+
+    auto weak = make_weak(out, rhs, gamma);
+    out->backward = [weak, eps]() {
+        auto [out, rhs, gamma] = lock_weak(weak);
+        batchnorm_1d_bwd(rhs->grad, out->grad, rhs->data, gamma->data, eps);
+    };
+}
+
 template <typename T, typename Func> void bfs(std::shared_ptr<Context<T>> &root, Func func) {
     using ptr_t = std::shared_ptr<Context<T>>;
     std::unordered_set<ptr_t> visited;

@@ -169,8 +169,10 @@ template <typename T> struct MatrixStorage {
 
     auto slice(size_t axis, size_t index) const {
         if (axis == 0) {
+            // column slice
             return data | std::views::drop(index * strides[1]) | std::views::stride(strides[0]) | std::views::take(shape[0]);
         }
+        // row slice
         return data | std::views::drop(index * strides[0]) | std::views::stride(strides[1]) | std::views::take(shape[1]);
     }
 
@@ -1393,6 +1395,110 @@ void select_embeddings_bwd(MatrixStorage<T> &dw, const MatrixStorage<T> &dy, con
             for (size_t d = 0; d < dims; d++) {
                 dw[{token, d}] += dy[{r, d + offset}];
             }
+        }
+    }
+}
+
+template <typename T>
+void batchnorm_1d(MatrixStorage<T> &y, MatrixStorage<T> &mean_running, MatrixStorage<T> &std_running,
+                  const MatrixStorage<T> &x, const MatrixStorage<T> &gamma, const MatrixStorage<T> &beta,
+                  const T momentum, const T eps) {
+    const shape_type gamma_beta_shape = {1, x.shape[1]};
+    assert_expected_shape(y.shape, x.shape);
+    assert_expected_shape(gamma.shape, gamma_beta_shape);
+    assert_expected_shape(beta.shape, gamma_beta_shape);
+    assert_expected_shape(mean_running.shape, gamma_beta_shape);
+    assert_expected_shape(std_running.shape, gamma_beta_shape);
+
+    auto x_slices = x.slices(1, 0);
+    auto y_slices = y.slices(1, 0);
+    auto gamma_slice = gamma.slice(1, 0);
+    auto beta_slice = beta.slice(1, 0);
+    auto mean_running_slice = mean_running.slice(1, 0);
+    auto std_running_slice = std_running.slice(1, 0);
+    const T one_minus_momentum = static_cast<T>(1) - momentum;
+    const T n = static_cast<T>(x.shape[0]);
+
+#pragma omp parallel for
+    for (auto [x_slice, y_slice, gamma_i, beta_i, mean_running_i, std_running_i] :
+         zip(x_slices, y_slices, gamma_slice, beta_slice, mean_running_slice, std_running_slice)) {
+        const T sum = std::accumulate(begin(x_slice), end(x_slice), static_cast<T>(0));
+        const T mean_i = sum / n;
+
+        std::vector<T> diff(x.shape[0]);
+
+        T var_i = 0;
+        for (const auto [x_i, diff_i] : zip(x_slice, diff)) {
+            diff_i = x_i - mean_i;
+            var_i += diff_i * diff_i;
+        }
+
+        // Note: this should be var /= (n - 1) with bessel's correction. However, the batchnorm
+        // paper does not use n - 1 when calculating the variance, so we don't either, which is
+        // is also in line with the pytorch implementation.
+        var_i /= n;
+
+        const T stddev_i = std::sqrt(var_i + eps);
+        const T std_inv_i = static_cast<T>(1) / stddev_i;
+
+        for (auto [y_i, diff_i] : zip(y_slice, diff)) {
+            y_i = gamma_i * (diff_i * std_inv_i) + beta_i;
+        }
+
+        // track the running mean and std
+        mean_running_i = mean_running_i * one_minus_momentum + mean_i * momentum;
+        std_running_i = std_running_i * one_minus_momentum + stddev_i * momentum;
+    }
+}
+
+template <typename T>
+void batchnorm_1d_bwd(MatrixStorage<T> &dx, const MatrixStorage<T> &dy, const MatrixStorage<T> &x,
+                      const MatrixStorage<T> &gamma, const T eps) {
+    // https://youtu.be/q8SA3rM6ckI?t=6463
+    const shape_type gamma_shape = {1, dx.shape[1]};
+    assert_expected_shape(dy.shape, dx.shape);
+    assert_expected_shape(gamma.shape, gamma_shape);
+
+    auto x_slices = x.slices(1, 0);
+    auto dx_slices = dx.slices(1, 0);
+    auto dy_slices = dy.slices(1, 0);
+    auto gamma_slice = gamma.slice(1, 0);
+
+    const T n = static_cast<T>(x.shape[0]);
+    const T n1 = n / (n - 1);
+
+#pragma omp parallel for
+    for (auto [x_slice, dx_slice, dy_slice, gamma_i] : zip(x_slices, dx_slices, dy_slices, gamma_slice)) {
+        const T sum = std::accumulate(begin(x_slice), end(x_slice), static_cast<T>(0));
+        const T mean_i = sum / n;
+
+        T var_i = 0;
+        for (const auto x_i : x_slice) {
+            const T diff_i = x_i - mean_i;
+            var_i += diff_i * diff_i;
+        }
+
+        var_i /= (n - 1);
+
+        const T std_inv_i = 1 / std::sqrt(var_i + eps);
+
+        std::vector<T> x_hat(x.shape[0]);
+
+        for (auto [x_i, x_hat_i] : zip(x_slice, x_hat)) {
+            x_hat_i = (x_i - mean_i) * std_inv_i;
+        }
+
+        T dy_sum_i = 0;
+        T dy_x_hat_sum_i = 0;
+        for (const auto [dy_j, x_hat_j] : zip(dy_slice, x_hat)) {
+            dy_sum_i += dy_j;
+            dy_x_hat_sum_i += dy_j * x_hat_j;
+        }
+
+        const T scale = gamma_i * std_inv_i / n;
+
+        for (auto [dx_i, dy_i, x_hat_i] : zip(dx_slice, dy_slice, x_hat)) {
+            dx_i = scale * (n * dy_i - dy_sum_i - n1 * x_hat_i * dy_x_hat_sum_i);
         }
     }
 }

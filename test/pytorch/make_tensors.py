@@ -53,6 +53,7 @@ def main():
     emb = C[Xtr]  # shape: 32, 3, 2
 
     hidden_size = 10
+    batch_size = Xtr.shape[0]
     W1 = torch.randn((3 * 2, hidden_size), generator=g, requires_grad=True)
     b1 = torch.randn((1, hidden_size), generator=g, requires_grad=True)
     W2 = torch.randn((hidden_size, 27), generator=g, requires_grad=True)
@@ -67,7 +68,7 @@ def main():
     bnmeani = hprebn.mean(0, keepdims=True)
     bndiff = hprebn - bnmeani
     bndiff2 = bndiff.pow(2)
-    bndiff2_div_n = bndiff2 * (1 / (hidden_size - 1))
+    bndiff2_div_n = bndiff2 * (1 / batch_size)
     bnvar = bndiff2_div_n.sum(0, keepdims=True)
     bnvar_inv = (bnvar + 1e-5).pow(-0.5)
     bnraw = bndiff * bnvar_inv
