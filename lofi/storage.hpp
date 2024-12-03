@@ -1527,20 +1527,39 @@ template <typename T> std::tuple<bool, std::string> is_close(const MatrixStorage
         return {false, ss.str()};
     }
 
+    bool close = true;
+    T max_diff = 0;
+    T max_a_val = 0;
+    T max_b_val = 0;
+    size_t max_r = 0;
+    size_t max_c = 0;
+
     for (size_t r = 0; r < a.shape[0]; r++) {
         for (size_t c = 0; c < a.shape[1]; c++) {
             const T &a_val = a[{r, c}];
             const T &b_val = b[{r, c}];
             if (!is_close(a_val, b_val)) {
-                std::stringstream coord;
-                coord << "{" << r << "," << c << "}";
-                std::stringstream ss;
-                ss << std::fixed << std::setprecision(16);
-                ss << "a[" << coord.str() << "](" << a_val << ") != b[" << coord.str() << "](" << b_val << ")";
-                return {false, ss.str()};
+                const T diff = std::abs(a_val - b_val);
+                if (close || diff > max_diff) {
+                    max_diff = diff;
+                    max_r = r;
+                    max_c = c;
+                    max_a_val = a_val;
+                    max_b_val = b_val;
+                    close = false;
+                }
             }
         }
     }
 
-    return {true, ""};
+    std::stringstream ss;
+
+    if (!close) {
+        std::stringstream coord;
+        coord << "{" << max_r << "," << max_c << "}";
+        ss << std::fixed << std::setprecision(16);
+        ss << "a[" << coord.str() << "](" << max_a_val << ") != b[" << coord.str() << "](" << max_b_val << ")";
+    }
+
+    return {close, ss.str()};
 }
