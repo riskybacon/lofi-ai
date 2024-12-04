@@ -1503,6 +1503,82 @@ void batchnorm_1d_bwd(MatrixStorage<T> &dx, const MatrixStorage<T> &dy, const Ma
     }
 }
 
+template <typename T>
+void softmax(MatrixStorage<T>& probs, const MatrixStorage<T>& logits, const size_t axis) {
+    // counts = (logits - logits.max(axis)).exp()
+    // counts_sum = counts.sum(axis)
+    // probs = counts / counts_sum
+    assert_expected_shape(probs.shape, logits.shape);
+    const size_t outer_axis = axis == 0 ? 1 : 0;
+
+    auto logits_slices = logits.slices(outer_axis, axis);
+    auto probs_slices = probs.slices(outer_axis, axis);
+
+    for (auto [logits_slice, probs_slice] : zip(logits_slices, probs_slices)) {
+        const T logit_max = *std::max_element(begin(logits_slice), end(logits_slice));
+
+        T counts_sum_i = 0;
+        std::vector<T> counts(logits.shape[axis]);
+        for (auto [counts_i, x_i] : zip(counts, logits_slice)) {
+            counts_i = std::exp(x_i - logit_max);
+            counts_sum_i += counts_i;
+        }
+
+        const T counts_sum_i_inv = 1 / counts_sum_i;
+
+        for (auto [probs_i, counts_i] : zip(probs_slice, counts)) {
+            probs_i = counts_i * counts_sum_i_inv;
+        }
+    }
+}
+
+template <typename T, typename U>
+void negative_log_likelihood(MatrixStorage<T> &loss, const MatrixStorage<T> &probs, const MatrixStorage<U> &labels) {
+    auto probs_slices = probs.slices(0, 1);
+    auto labels_slice = labels.slice(0, 0);
+
+    assert_expected_shape(loss.shape, shape_type({1, 1}));
+
+    T nll = 0;
+
+    for (auto [probs_slice, label] : zip(probs_slices, labels_slice)) {
+        const T val = probs_slice[label];
+        nll += std::log(val);
+    }
+
+    loss[{0, 0}] = -nll / static_cast<T>(probs.shape[0]);
+}
+
+template <typename T, typename U>
+void cross_entropy_loss(MatrixStorage<T> &loss, const MatrixStorage<T> &logits, const MatrixStorage<U> &labels, const size_t axis) {
+    MatrixStorage<T> probs(logits.shape);
+    softmax(probs, logits, axis);
+    negative_log_likelihood(loss, probs, labels);
+}
+
+template <typename T, typename U>
+void cross_entropy_loss_bwd(MatrixStorage<T> &dlogits, const MatrixStorage<T> &logits, const MatrixStorage<U> &labels, const size_t axis) {
+    // dlogits = F.softmax(logits, 1)
+    // dlogits[range(n), y] -= 1
+    // dlogits /= n
+
+    assert_expected_shape(dlogits.shape, logits.shape);
+    const size_t outer_axis = axis == 0 ? 1 : 0;
+
+    softmax(dlogits, logits, axis);
+
+    const T n_inv = 1 / static_cast<T>(logits.shape[outer_axis]);
+    auto dlogits_slices = dlogits.slices(outer_axis, axis);
+    auto labels_slice = labels.slice(0, 0);
+
+    for (auto [dlogits_slice, label] : zip(dlogits_slices, labels_slice)) {
+        for (auto [dlogit, i] : zip(dlogits_slice, iota(size_t(0), dlogits_slice.size()))) {
+            T dl = i == label ? dlogit - static_cast<T>(1) : dlogit;
+            dlogit = dl * n_inv;
+        }
+    }
+}
+
 template <typename T> std::ostream &operator<<(std::ostream &out, const MatrixStorage<T> &mat) {
     for (size_t r = 0; r < mat.shape[0]; r++) {
         for (size_t c = 0; c < mat.shape[1]; c++) {

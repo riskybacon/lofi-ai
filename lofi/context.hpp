@@ -497,6 +497,26 @@ void batchnorm_1d(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> 
     };
 }
 
+template <typename T, typename U>
+void cross_entropy_loss(std::shared_ptr<Context<T>> &out, std::shared_ptr<Context<T>> &logits,
+                        const std::shared_ptr<Context<U>> &labels, size_t axis) {
+    cross_entropy_loss(out->data, logits->data, labels->data, axis);
+
+    if (no_grad_) {
+        return;
+    }
+
+    out->prev = {logits};
+    logits->degrees++;
+    out->op = "cross_entropy_loss";
+
+    auto weak = make_one_weak(logits);
+    out->backward = [weak, labels, axis]() {
+        auto logits = lock_one_weak(weak);
+        cross_entropy_loss_bwd(logits->grad, logits->data, labels->data, axis);
+    };
+}
+
 template <typename T, typename Func> void bfs(std::shared_ptr<Context<T>> &root, Func func) {
     using ptr_t = std::shared_ptr<Context<T>>;
     std::unordered_set<ptr_t> visited;

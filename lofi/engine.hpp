@@ -105,7 +105,7 @@ template <typename T> struct Matrix {
         const auto data = read_numpy_array<value_type>(filename);
         if (data.size() != shape[0] * shape[1]) {
             std::stringstream ss;
-            ss << "data size " << data.size() << " does not match shape " << shape;
+            ss << "File `" << filename << "`: data size " << data.size() << " does not match shape " << shape;
             throw std::invalid_argument(ss.str());
         }
 
@@ -513,4 +513,13 @@ template <typename T> struct BatchNorm1D {
     void training(bool tr) { training_ = tr; }
 
     std::vector<Matrix<T>> parameters() { return {gamma, beta}; }
+};
+
+template <typename T> struct CrossEntropyLoss {
+    template<typename U>
+    auto forward(Matrix<T> &logits, Matrix<U> &labels) {
+        Matrix<T> out({1, 1});
+        cross_entropy_loss(out.ctx_, logits.ctx_, labels.ctx_, 1);
+        return out;
+    }
 };

@@ -162,13 +162,13 @@ template <typename T> struct Model {
 
 template <typename T> struct SoftMax {
     auto operator()(Matrix<T> &logits) const {
-        auto logit_maxes = logits.max(1);
-        auto norm_logits = logits - logit_maxes;
-        auto counts = norm_logits.exp();
-        auto counts_sum = counts.sum(1);
-        auto counts_sum_inv = counts_sum.pow(-1.0f);
-        auto probs = counts * counts_sum_inv;
-        return probs;
+        auto logit_maxes = logits.max(1);  // 32 x 27 -> 32 x 1
+        auto norm_logits = logits - logit_maxes; // 32 x 27 - 32 x 1 -> 32 x 27
+        auto counts = norm_logits.exp(); // 32 x 27
+        auto counts_sum = counts.sum(1); // 32 x 27 -> 32 x 1
+        auto counts_sum_inv = counts_sum.pow(-1.0f); // 32 x 1
+        auto probs = counts * counts_sum_inv; // 32 x 27 * 32 x 1 -> 32 x 27
+        return probs; // 32 x 27
     }
 };
 
@@ -214,8 +214,7 @@ void run(void) {
     std::cout << "Test set size: " << Xte.shape()[0] << std::endl;
 
     Model<float> model(context_size, embedding_dim, hidden, num_tokens, g);
-    SoftMax<float> softmax;
-    NegativeLogLikelihood<float> loss_fn;
+    CrossEntropyLoss<float> loss_fn;
 
     std::cout << "num_parameters: " << model.num_parameters() << std::endl;
 
@@ -263,8 +262,7 @@ void run(void) {
 
         // Forward
         auto logits = model.forward(x_batch);
-        auto probs = softmax(logits);
-        auto loss = loss_fn(probs, y_batch);
+        auto loss = loss_fn.forward(logits, y_batch);
 
         if (k % 500 == 0 || k == num_steps - 1) {
             const auto end = std::chrono::high_resolution_clock::now();
@@ -289,6 +287,7 @@ void run(void) {
     // Sample from model
     model.training(false);
     Matrix<size_t> context({1, context_size});
+    SoftMax<float> softmax;
     for (size_t i = 0; i < 20; i++) {
         context.data() = 0;
         std::vector<char> out;
