@@ -2,6 +2,7 @@
 #include <climits>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <tuple>
 #include <unordered_map>
@@ -9,6 +10,9 @@
 
 #include <lofi/engine.hpp>
 #include <lofi/graphviz.hpp>
+#include <lofi/nn.hpp>
+
+using std::make_shared;
 
 /**
  * @brief Reads the content of a file and returns various data structures based on its contents.
@@ -95,42 +99,52 @@ auto build_dataset(std::vector<std::string>::iterator &w_begin, std::vector<std:
 }
 
 template <typename T> struct Model {
-    Matrix<T> C;
-    Matrix<T> W1;
-    Matrix<T> W2;
-    Matrix<T> b2;
-    BatchNorm1D<T> bn;
     std::vector<Matrix<T>> parameters_;
     bool training_ = true;
+    std::shared_ptr<Embeddings<T>> C;
+    std::shared_ptr<Sequential<T>> layers;
 
-    Model(size_t context_size, size_t embedding_dim, size_t hidden, size_t num_tokens, std::mt19937 g) : bn(hidden) {
+    Model(size_t context_size, size_t embedding_dim, size_t hidden, size_t num_tokens, std::mt19937 g) {
+        C = make_shared<Embeddings<T>>(num_tokens, embedding_dim, g);
+        auto L1 = make_shared<Linear<T>>(context_size * embedding_dim, hidden, false, g);
+        auto L2 = make_shared<Linear<T>>(hidden, num_tokens, true, g);
+
+        std::vector<std::shared_ptr<Module<T>>> my_layers = {
+            L1,
+            make_shared<BatchNorm1D<T>>(hidden),
+            make_shared<Tanh<T>>(),
+            L2,
+        };
+
+        layers = make_shared<Sequential<T>>(my_layers);
+
         // TODO: implement Kaming initialization
         // https://youtu.be/P6sfmUTpUmc?t=1860
         // "Kaiming init" paper: https://arxiv.org/abs/1502.01852
-        T tanh_gain = static_cast<T>(5) / static_cast<T>(3);
-        T W1_scale = tanh_gain / static_cast<T>(sqrt(context_size * embedding_dim));
-        T W2_scale = tanh_gain / static_cast<T>(sqrt(hidden));
-        C = Matrix<T>::randn({num_tokens, embedding_dim}, g);
-        W1 = Matrix<T>::randn({context_size * C.shape()[1], hidden}, g) * W1_scale;
-        W2 = Matrix<T>::randn({hidden, num_tokens}, g) * W2_scale;
-        b2 = Matrix<T>::randn({1, num_tokens}, g) * 0;
+        const T tanh_gain = static_cast<T>(5) / static_cast<T>(3);
+        const T W1_scale = tanh_gain / static_cast<T>(sqrt(context_size * embedding_dim));
+        const T W2_scale = tanh_gain / static_cast<T>(sqrt(hidden));
 
-        parameters_ = {C, W1, W2, b2};
+        {
+            no_grad ng_;
+            L1->weight *= W1_scale;
+            L2->weight *= W2_scale;
+        }
 
-        for (auto &p : bn.parameters()) {
+        for (auto p : C->parameters()) {
             parameters_.push_back(p);
         }
 
-        C.label() = "C";
-        W1.label() = "W1";
-        W2.label() = "W2";
-        b2.label() = "b2";
+        for (auto p : layers->parameters()) {
+            parameters_.push_back(p);
+        }
     }
 
     std::vector<Matrix<T>> parameters() { return parameters_; }
 
     void training(bool tr) {
-        bn.training(tr);
+        C->training(tr);
+        layers->training(tr);
         training_ = tr;
     }
 
@@ -143,41 +157,14 @@ template <typename T> struct Model {
     }
 
     auto forward(Matrix<size_t> &x) {
-        const size_t n = x.shape()[0];
-        auto emb = select_embeddings(C, x);
-        auto hprebn = matmul(emb, W1);
-        auto hpreact = bn.forward(hprebn);
-        auto h = hpreact.tanh();
-        auto h_w2 = matmul(h, W2);
-        auto logits = h_w2 + b2;
-        return logits;
+        auto x_hat = C->forward(x);
+        return layers->forward(x_hat);
     }
 
     void weight_update(float lr) {
         for (auto &p : parameters()) {
             p.data() += -lr * p.grad();
         }
-    }
-};
-
-template <typename T> struct SoftMax {
-    auto operator()(Matrix<T> &logits) const {
-        auto logit_maxes = logits.max(1);
-        auto norm_logits = logits - logit_maxes;
-        auto counts = norm_logits.exp();
-        auto counts_sum = counts.sum(1);
-        auto counts_sum_inv = counts_sum.pow(-1.0f);
-        auto probs = counts * counts_sum_inv;
-        return probs;
-    }
-};
-
-template <typename T> struct NegativeLogLikelihood {
-    auto operator()(Matrix<T> &probs, Matrix<size_t> &y) const {
-        auto selector = Matrix<size_t>(range(y.shape()[0]), y);
-        auto logprobs = probs.log();
-        auto loss = -logprobs[selector].mean(0);
-        return loss;
     }
 };
 
@@ -273,8 +260,8 @@ void run(void) {
         }
 
         if (k == 0) {
-            draw_dot(loss, "mlp_ng.dot", "TB");
-            generate_svg_from_dot("mlp_ng.dot", "mlp_ng.svg");
+            draw_dot(loss, "mlp_bn.dot", "TB");
+            generate_svg_from_dot("mlp_bn.dot", "mlp_bn.svg");
         }
 
         if (training) {
@@ -285,6 +272,7 @@ void run(void) {
     }
 
     // Sample from model
+    no_grad ng_;
     model.training(false);
     Matrix<size_t> context({1, context_size});
     SoftMax<float> softmax;
@@ -294,7 +282,7 @@ void run(void) {
 
         while (out.size() < 100) {
             auto logits = model.forward(context);
-            auto probs = softmax(logits);
+            auto probs = softmax.forward(logits);
             auto ix = multinomial(probs, 1, true, g).front();
             out.push_back(itos[ix]);
 
