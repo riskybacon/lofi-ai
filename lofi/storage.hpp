@@ -237,6 +237,11 @@ template <typename T> struct MatrixStorage {
         return *this;
     }
 
+    MatrixStorage &operator*=(const T &rhs) {
+        multiply(*this, *this, rhs);
+        return *this;
+    }
+
     MatrixStorage &operator-() {
         multiply(*this, static_cast<value_type>(-1), *this);
         return *this;

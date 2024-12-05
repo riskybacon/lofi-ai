@@ -230,6 +230,13 @@ template <typename T> struct Matrix {
 
     Matrix &operator*=(Matrix &&rhs) { return *this *= rhs; }
 
+    Matrix &operator*=(const value_type &rhs) {
+        Matrix out(shape());
+        multiply(out.ctx_, ctx_, rhs);
+        ctx_ = out.ctx_;
+        return *this;
+    }
+
     Matrix operator/(Matrix &rhs) {
         Matrix out(max_shape(shape(), rhs.shape()));
         divide(out.ctx_, ctx_, rhs.ctx_);
