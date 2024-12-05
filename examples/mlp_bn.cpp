@@ -162,13 +162,13 @@ template <typename T> struct Model {
 
 template <typename T> struct SoftMax {
     auto operator()(Matrix<T> &logits) const {
-        auto logit_maxes = logits.max(1);  // 32 x 27 -> 32 x 1
-        auto norm_logits = logits - logit_maxes; // 32 x 27 - 32 x 1 -> 32 x 27
-        auto counts = norm_logits.exp(); // 32 x 27
-        auto counts_sum = counts.sum(1); // 32 x 27 -> 32 x 1
-        auto counts_sum_inv = counts_sum.pow(-1.0f); // 32 x 1
-        auto probs = counts * counts_sum_inv; // 32 x 27 * 32 x 1 -> 32 x 27
-        return probs; // 32 x 27
+        auto logit_maxes = logits.max(1);
+        auto norm_logits = logits - logit_maxes;
+        auto counts = norm_logits.exp();
+        auto counts_sum = counts.sum(1);
+        auto counts_sum_inv = counts_sum.pow(-1.0f);
+        auto probs = counts * counts_sum_inv;
+        return probs;
     }
 };
 
