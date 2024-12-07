@@ -6,6 +6,7 @@
 
 #include <lofi/engine.hpp>
 #include <lofi/storage.hpp>
+#include <lofi/tensor.hpp>
 
 size_t num_tests = 0;
 size_t num_passed = 0;
@@ -143,6 +144,18 @@ void is_close_helper(const std::vector<T> &a, const std::vector<T> &b, const cha
         num_failed++;
     }
     num_tests++;
+}
+
+template <typename T>
+void is_close_helper(const Tensor<T> &a, const Tensor<T> &b, const char *file, const int line) {
+    num_tests++;
+    const auto [condition, reason] = is_close(a, b);
+    if (!condition) {
+        std::cerr << "[FAIL] (" << file << ":" << line << "): " << reason << std::endl;
+        num_failed++;
+    } else {
+        num_passed++;
+    }
 }
 
 template <typename T>
