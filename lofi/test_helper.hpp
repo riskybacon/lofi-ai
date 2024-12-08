@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <ranges>
 
 #include <lofi/engine.hpp>
 #include <lofi/storage.hpp>
@@ -38,6 +39,29 @@ void is_equal_helper(const size_t &a, const size_t &b, const char *file, const i
         num_passed++;
     }
     num_tests++;
+}
+
+template <typename Iterable0, typename Iterable1>
+    requires std::ranges::range<Iterable0> && std::is_arithmetic_v<std::ranges::range_value_t<Iterable0>> &&
+             std::ranges::range<Iterable1> && std::is_arithmetic_v<std::ranges::range_value_t<Iterable1>>
+void is_equal_helper(Iterable0 &&iterable0, Iterable1 &&iterable1, const char *file, const int line) {
+    num_tests++;
+
+    if (std::ranges::size(iterable0) != std::ranges::size(iterable1)) {
+        std::cerr << "[FAIL] (" << file << ":" << line << "): size mismatch: " << std::ranges::size(iterable0) << " != "
+                  << std::ranges::size(iterable1) << std::endl;
+        num_failed++;
+        return;
+    }
+
+    for (const auto &[val0, val1] : zip(iterable0, iterable1)) {
+        if (val0 != val1) {
+            std::cerr << "[FAIL] (" << file << ":" << line << "): " << val0 << " != " << val1 << std::endl;
+            num_failed++;
+            return;
+        }
+    }
+    num_passed++;
 }
 
 template <typename T> void not_equal_helper(const T &a, const T &b, const char *file, const int line) {
