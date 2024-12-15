@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <lofi/generator.hpp>
+#include <lofi/util.hpp>
 
 #ifdef BOUNDS_CHECK
 constexpr bool _BOUNDS_CHECK = true;
@@ -1594,11 +1595,6 @@ template <typename T> std::ostream &operator<<(std::ostream &out, const MatrixSt
         }
     }
     return out;
-}
-
-template <typename T> bool is_close(const T &a, const T &b) {
-    const T epsilon = 1e-4;
-    return std::abs(a - b) <= epsilon;
 }
 
 template <typename T> std::tuple<bool, std::string> is_close(const MatrixStorage<T> &a, const MatrixStorage<T> &b) {

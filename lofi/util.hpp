@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <fstream>
 
-
 template <typename T>
 std::vector<T> read_numpy_array(const std::string& filename) {
     std::ifstream file(filename, std::ios::binary);
@@ -23,4 +22,21 @@ std::vector<T> read_numpy_array(const std::string& filename) {
     }
 
     return data;
+}
+
+template <typename T> std::ostream &operator<<(std::ostream &out, const std::vector<T> &vec) {
+    out << "[";
+    for (size_t i = 0; i < vec.size(); i++) {
+        out << vec[i];
+        if (i < vec.size() - 1) {
+            out << ",";
+        }
+    }
+    out << "]";
+    return out;
+}
+
+template <typename T> bool is_close(const T &a, const T &b) {
+    const T epsilon = 1e-4;
+    return std::abs(a - b) <= epsilon;
 }

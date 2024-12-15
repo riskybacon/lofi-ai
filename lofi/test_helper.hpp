@@ -158,15 +158,3 @@ template <typename T> void fill_mat(MatrixStorage<T> &mat, const T offset = stat
         }
     }
 }
-
-template <typename T> std::ostream &operator<<(std::ostream &out, const std::vector<T> &vec) {
-    out << "[";
-    for (size_t i = 0; i < vec.size(); i++) {
-        out << vec[i];
-        if (i < vec.size() - 1) {
-            out << ",";
-        }
-    }
-    out << "]";
-    return out;
-}
